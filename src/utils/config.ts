@@ -1,0 +1,40 @@
+export const config = {
+  // API Keys (from environment)
+  idealPostcodesApiKey: process.env.IDEAL_POSTCODES_API_KEY || '',
+  propertyDataApiKey: process.env.PROPERTYDATA_API_KEY || '',
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+  supabaseUrl: process.env.SUPABASE_URL || '',
+  supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || '',
+  hmacSecret: process.env.HMAC_SECRET || '',
+
+  // HTTP settings
+  http: {
+    timeout: 1500, // 1.5 seconds
+    retries: 2,
+  },
+
+  // API base URLs
+  urls: {
+    idealPostcodes: 'https://api.ideal-postcodes.co.uk/v1',
+    propertyData: 'https://api.propertydata.co.uk',
+    streetView: 'https://maps.googleapis.com/maps/api/streetview',
+  },
+} as const;
+
+export function validateConfig(): { valid: boolean; missing: string[] } {
+  const required = [
+    'idealPostcodesApiKey',
+    'propertyDataApiKey',
+    'googleMapsApiKey',
+    'supabaseUrl',
+    'supabaseServiceKey',
+  ] as const;
+
+  const missing = required.filter((key) => !config[key]);
+
+  return {
+    valid: missing.length === 0,
+    missing,
+  };
+}
+

@@ -1,0 +1,124 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { logger } from '../src/utils/logger';
+import { validateValuationRequest, ValuationRequest } from '../src/types/request';
+import { resolveSubjectProperty } from '../src/engine/addressResolver';
+import { getStreetViewImage } from '../src/services/streetView';
+import { getRequestOrigin } from '../src/utils/requestOrigin';
+import type { SubjectProperty } from '../src/types/property';
+import type { StreetViewResult } from '../src/types/services';
+
+/**
+ * Build the valuation response object
+ */
+function buildValuationResponse(
+  property: SubjectProperty,
+  streetView: StreetViewResult
+): Record<string, unknown> {
+  return {
+    _milestone: 1,
+    _note: 'Full valuation will be available in Milestone 3',
+    address: property.normalizedAddress,
+    uprn: property.uprn,
+    coordinates: {
+      latitude: property.latitude,
+      longitude: property.longitude,
+    },
+    epc: property.floorAreaSqm
+      ? { floorAreaSqm: property.floorAreaSqm, rating: property.epcRating }
+      : null,
+    streetViewUrl: streetView.url,
+    streetViewAvailable: streetView.available,
+    marketValue: null,
+    offers: null,
+    confidence: null,
+    comparables: null,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * Process the valuation request
+ */
+async function processValuation(
+  data: ValuationRequest,
+  origin: string,
+  res: VercelResponse
+): Promise<void> {
+  const propertyResult = await resolveSubjectProperty(
+    {
+      addressLine1: data.addressLine1,
+      addressLine2: data.addressLine2,
+      postcode: data.postcode,
+      propertyType: data.propertyType,
+    },
+    origin
+  );
+
+  if (!propertyResult.success) {
+    logger.warn('Property resolution failed', { error: propertyResult.error });
+    res.status(400).json({
+      error: 'Could not resolve property',
+      details: propertyResult.error,
+      missingFields: propertyResult.missingFields,
+    });
+    return;
+  }
+
+  const property = propertyResult.property;
+  const streetViewResult = await getStreetViewImage(property.latitude, property.longitude);
+  const response = buildValuationResponse(property, streetViewResult);
+
+  res.status(200).json(response);
+
+  logger.info('Valuation request processed (M1)', {
+    uprn: property.uprn,
+    hasEPC: property.floorAreaSqm !== null,
+  });
+}
+
+/**
+ * POST /api/valuation
+ *
+ * Milestone 1: Basic endpoint with address resolution only
+ * Full valuation logic will be implemented in Milestone 3
+ */
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const origin = getRequestOrigin(req);
+  logger.info('Valuation request received', { origin });
+
+  const validation = validateValuationRequest(req.body);
+
+  if (!validation.valid) {
+    logger.warn('Invalid valuation request', { errors: validation.errors });
+    res.status(400).json({ error: 'Invalid request', details: validation.errors });
+    return;
+  }
+
+  try {
+    await processValuation(validation.data, origin, res);
+  } catch (err) {
+    logger.error('Valuation request failed', { error: (err as Error).message });
+    res.status(500).json({
+      error: 'Internal server error',
+      message: (err as Error).message,
+    });
+  }
+}
