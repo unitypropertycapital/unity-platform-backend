@@ -2,6 +2,20 @@ import type { PropertyType } from './property';
 
 export type SaleTimeline = '0-8_weeks' | '8-16_weeks' | '16+_weeks';
 
+/**
+ * Pre-resolved address data from frontend (optional)
+ * If provided, skips Ideal Postcodes API call in backend
+ */
+export interface PreResolvedAddress {
+  uprn: string;
+  latitude: number;
+  longitude: number;
+  line_1: string;
+  line_2?: string;
+  line_3?: string;
+  post_town: string;
+}
+
 export interface ValuationRequest {
   addressLine1: string;
   addressLine2?: string;
@@ -12,6 +26,12 @@ export interface ValuationRequest {
   source: string;
   consent: boolean;
   hmac: string;
+
+  /**
+   * Optional: Pre-resolved address from frontend Ideal Postcodes lookup
+   * If provided, backend skips Ideal Postcodes API call (saves 1 API call)
+   */
+  resolvedAddress?: PreResolvedAddress;
 }
 
 export function isValidPropertyType(value: unknown): value is PropertyType {
@@ -70,6 +90,29 @@ export function validateValuationRequest(
     return { valid: false, errors };
   }
 
+  // Parse optional pre-resolved address
+  let resolvedAddress: PreResolvedAddress | undefined;
+  if (data.resolvedAddress && typeof data.resolvedAddress === 'object') {
+    const resolved = data.resolvedAddress as Record<string, unknown>;
+    if (
+      typeof resolved.uprn === 'string' &&
+      typeof resolved.latitude === 'number' &&
+      typeof resolved.longitude === 'number' &&
+      typeof resolved.line_1 === 'string' &&
+      typeof resolved.post_town === 'string'
+    ) {
+      resolvedAddress = {
+        uprn: resolved.uprn,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+        line_1: resolved.line_1,
+        line_2: resolved.line_2 as string | undefined,
+        line_3: resolved.line_3 as string | undefined,
+        post_town: resolved.post_town,
+      };
+    }
+  }
+
   return {
     valid: true,
     data: {
@@ -82,6 +125,7 @@ export function validateValuationRequest(
       source: data.source as string,
       consent: data.consent as boolean,
       hmac: data.hmac as string,
+      resolvedAddress,
     },
   };
 }

@@ -21,7 +21,10 @@ export interface SubjectProperty {
 
   // EPC data (MAT-1.3)
   floorAreaSqm: number | null;
+  floorAreaSqFt: number | null;
+  habitableRooms: number | null;
   epcRating: string | null;
+  epcScore: number | null;
   epcAvailable: boolean;
   epcMissingReason: string | null;
 }

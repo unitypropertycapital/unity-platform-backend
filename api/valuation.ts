@@ -40,7 +40,10 @@ function buildValuationResponse(
       ? {
           available: true,
           floorAreaSqm: property.floorAreaSqm,
+          floorAreaSqFt: property.floorAreaSqFt,
+          habitableRooms: property.habitableRooms,
           rating: property.epcRating,
+          score: property.epcScore,
         }
       : {
           available: false,
@@ -75,6 +78,7 @@ async function processValuation(
       addressLine2: data.addressLine2,
       postcode: data.postcode,
       propertyType: data.propertyType,
+      resolvedAddress: data.resolvedAddress, // Pass pre-resolved address if available
     },
     origin
   );

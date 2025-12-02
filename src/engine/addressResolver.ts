@@ -3,12 +3,18 @@ import { getFloorArea } from '../services/epc';
 import { logger } from '../utils/logger';
 import type { SubjectProperty, ResolvePropertyResult, PropertyType } from '../types/property';
 import type { IdealPostcodesAddress } from '../types/services';
+import type { PreResolvedAddress } from '../types/request';
 
 export interface AddressInput {
   addressLine1: string;
   addressLine2?: string;
   postcode: string;
   propertyType: PropertyType;
+  /**
+   * Optional: Pre-resolved address from frontend
+   * If provided, skips Ideal Postcodes API call
+   */
+  resolvedAddress?: PreResolvedAddress;
 }
 
 type AddressLookupResult =
@@ -82,7 +88,10 @@ async function lookupAndMatchAddress(
 
 interface EPCResult {
   floorAreaSqm: number | null;
+  floorAreaSqFt: number | null;
+  habitableRooms: number | null;
   epcRating: string | null;
+  epcScore: number | null;
   epcAvailable: boolean;
   epcMissingReason: string | null;
 }
@@ -100,11 +109,17 @@ async function fetchEPCData(
   if (epcResult.success) {
     logger.info('EPC data retrieved', {
       floorAreaSqm: epcResult.data.floorAreaSqm,
+      floorAreaSqFt: epcResult.data.floorAreaSqFt,
+      habitableRooms: epcResult.data.habitableRooms,
       epcRating: epcResult.data.currentRating,
+      epcScore: epcResult.data.score,
     });
     return {
       floorAreaSqm: epcResult.data.floorAreaSqm,
+      floorAreaSqFt: epcResult.data.floorAreaSqFt,
+      habitableRooms: epcResult.data.habitableRooms,
       epcRating: epcResult.data.currentRating,
+      epcScore: epcResult.data.score,
       epcAvailable: true,
       epcMissingReason: null,
     };
@@ -113,7 +128,10 @@ async function fetchEPCData(
   logger.warn('EPC data not available', { error: epcResult.error });
   return {
     floorAreaSqm: null,
+    floorAreaSqFt: null,
+    habitableRooms: null,
     epcRating: null,
+    epcScore: null,
     epcAvailable: false,
     epcMissingReason: epcResult.error,
   };
@@ -132,22 +150,60 @@ export async function resolveSubjectProperty(
   logger.info('Resolving subject property', {
     addressLine1: input.addressLine1,
     postcode: input.postcode,
+    hasPreResolved: !!input.resolvedAddress,
   });
 
-  // Step 1-2: Look up postcode and find matching address
-  const lookupResult = await lookupAndMatchAddress(input.postcode, input.addressLine1, origin);
+  let matchedAddress: IdealPostcodesAddress;
+  let normalizedAddress: string;
 
-  if (!lookupResult.success) {
-    return lookupResult;
+  // Check if frontend provided pre-resolved address (saves 1 API call!)
+  if (input.resolvedAddress) {
+    logger.info('Using pre-resolved address from frontend (skipping Ideal Postcodes API)', {
+      uprn: input.resolvedAddress.uprn,
+    });
+
+    // Use pre-resolved data directly
+    matchedAddress = {
+      uprn: input.resolvedAddress.uprn,
+      latitude: input.resolvedAddress.latitude,
+      longitude: input.resolvedAddress.longitude,
+      line_1: input.resolvedAddress.line_1,
+      line_2: input.resolvedAddress.line_2 || '',
+      line_3: input.resolvedAddress.line_3 || '',
+      post_town: input.resolvedAddress.post_town,
+      postcode: input.postcode.toUpperCase(),
+      building_name: '',
+      building_number: '',
+      thoroughfare: '',
+      country: 'England',
+    };
+
+    const addressParts = [
+      matchedAddress.line_1,
+      matchedAddress.line_2,
+      matchedAddress.line_3,
+      matchedAddress.post_town,
+      matchedAddress.postcode,
+    ].filter(Boolean);
+    normalizedAddress = addressParts.join(', ');
+  } else {
+    // Step 1-2: Look up postcode and find matching address via Ideal Postcodes
+    const lookupResult = await lookupAndMatchAddress(input.postcode, input.addressLine1, origin);
+
+    if (!lookupResult.success) {
+      return lookupResult;
+    }
+
+    matchedAddress = lookupResult.address;
+    normalizedAddress = lookupResult.normalizedAddress;
   }
 
-  const { address: matchedAddress, normalizedAddress } = lookupResult;
-
-  logger.info('Address resolved via Ideal Postcodes', {
+  logger.info('Address resolved', {
     uprn: matchedAddress.uprn,
     latitude: matchedAddress.latitude,
     longitude: matchedAddress.longitude,
     normalizedAddress,
+    source: input.resolvedAddress ? 'frontend' : 'Ideal Postcodes API',
   });
 
   // Step 3: Get floor area from EPC (optional)
@@ -179,7 +235,10 @@ export async function resolveSubjectProperty(
 
     // EPC data (MAT-1.3)
     floorAreaSqm: epcData.floorAreaSqm,
+    floorAreaSqFt: epcData.floorAreaSqFt,
+    habitableRooms: epcData.habitableRooms,
     epcRating: epcData.epcRating,
+    epcScore: epcData.epcScore,
     epcAvailable: epcData.epcAvailable,
     epcMissingReason: epcData.epcMissingReason,
   };
