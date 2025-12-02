@@ -1,52 +1,42 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { healthCheck as idealPostcodesHealth } from '../src/services/idealPostcodes';
 import { healthCheck as propertyDataHealth } from '../src/services/propertyData';
+import { healthCheck as epcHealth } from '../src/services/epc';
 import { healthCheck as streetViewHealth } from '../src/services/streetView';
-import { healthCheck as supabaseHealth } from '../src/services/supabase';
-import { healthCheck as onsHpiHealth } from '../src/services/onsHpi';
 import { validateConfig } from '../src/utils/config';
 import { logger } from '../src/utils/logger';
 import { getRequestOrigin } from '../src/utils/requestOrigin';
-import type { HealthCheckResponse, ServiceHealth } from '../src/types/services';
+import { handleError } from '../src/utils/errors';
+import type { HealthCheckResponse, HealthCheckServicesMap, ServiceStatus } from '../src/types/services';
 
-interface HealthCheckWithService {
-  service: string;
-  ok: boolean;
-  latencyMs: number;
-  error?: string;
+interface HealthCheckResults {
+  ideal_postcodes: ServiceStatus;
+  property_data: ServiceStatus;
+  epc: ServiceStatus;
+  google_street_view: ServiceStatus;
 }
 
-async function runHealthChecks(origin: string): Promise<ServiceHealth[]> {
-  const checkPromises = [
-    idealPostcodesHealth(origin).then((r) => ({ service: 'idealPostcodes', ...r })),
-    propertyDataHealth().then((r) => ({ service: 'propertyData', ...r })),
-    streetViewHealth().then((r) => ({ service: 'googleStreetView', ...r })),
-    supabaseHealth().then((r) => ({ service: 'supabase', ...r })),
-    onsHpiHealth().then((r) => ({ service: 'onsHpi', ...r })),
-  ];
+async function runHealthChecks(origin: string): Promise<HealthCheckResults> {
+  const [idealResult, propertyDataResult, epcResult, streetViewResult] = await Promise.allSettled([
+    idealPostcodesHealth(origin),
+    propertyDataHealth(),
+    epcHealth(),
+    streetViewHealth(),
+  ]);
 
-  const results = await Promise.allSettled(checkPromises);
-
-  const serviceNames = ['idealPostcodes', 'propertyData', 'googleStreetView', 'supabase', 'onsHpi'];
-
-  return results.map((result, index): ServiceHealth => {
-    if (result.status === 'fulfilled') {
-      const { service, ok, latencyMs, error } = result.value as HealthCheckWithService;
-      return {
-        service,
-        status: ok ? 'ok' : 'error',
-        latencyMs,
-        message: error,
-      };
+  const getStatus = (result: PromiseSettledResult<{ ok: boolean }>): ServiceStatus => {
+    if (result.status === 'fulfilled' && result.value.ok) {
+      return 'ok';
     }
+    return 'error';
+  };
 
-    return {
-      service: serviceNames[index],
-      status: 'error',
-      latencyMs: 0,
-      message: result.reason?.message || 'Unknown error',
-    };
-  });
+  return {
+    ideal_postcodes: getStatus(idealResult),
+    property_data: getStatus(propertyDataResult),
+    epc: getStatus(epcResult),
+    google_street_view: getStatus(streetViewResult),
+  };
 }
 
 export default async function handler(
@@ -78,38 +68,44 @@ export default async function handler(
   if (!configCheck.valid) {
     logger.error('Configuration invalid', { missing: configCheck.missing });
     res.status(500).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      error: 'Missing configuration',
-      missing: configCheck.missing,
+      status: 'error',
+      services: {
+        ideal_postcodes: 'error',
+        property_data: 'error',
+        epc: 'error',
+        google_street_view: 'error',
+      },
     });
     return;
   }
 
   try {
-    const services = await runHealthChecks(origin);
+    const services: HealthCheckServicesMap = await runHealthChecks(origin);
 
-    const errorCount = services.filter((s) => s.status === 'error').length;
-    const overallStatus: HealthCheckResponse['status'] =
-      errorCount === 0 ? 'healthy' : errorCount < services.length ? 'degraded' : 'unhealthy';
+    const hasErrors = Object.values(services).some((s) => s === 'error');
+    const overallStatus: 'ok' | 'error' = hasErrors ? 'error' : 'ok';
 
     const response: HealthCheckResponse = {
       status: overallStatus,
-      timestamp: new Date().toISOString(),
       services,
     };
 
-    const statusCode = overallStatus === 'unhealthy' ? 503 : 200;
+    const statusCode = overallStatus === 'error' ? 503 : 200;
 
-    logger.info('Health check complete', { status: overallStatus, errorCount });
+    logger.info('Health check complete', { status: overallStatus, services });
 
     res.status(statusCode).json(response);
   } catch (err) {
-    logger.error('Health check failed', { error: (err as Error).message });
+    // Centralized error handling - never silent
+    handleError(err, { endpoint: '/api/health', origin });
     res.status(500).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      error: (err as Error).message,
+      status: 'error',
+      services: {
+        ideal_postcodes: 'error',
+        property_data: 'error',
+        epc: 'error',
+        google_street_view: 'error',
+      },
     });
   }
 }

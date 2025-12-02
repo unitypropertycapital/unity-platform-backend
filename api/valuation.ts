@@ -4,11 +4,13 @@ import { validateValuationRequest, ValuationRequest } from '../src/types/request
 import { resolveSubjectProperty } from '../src/engine/addressResolver';
 import { getStreetViewImage } from '../src/services/streetView';
 import { getRequestOrigin } from '../src/utils/requestOrigin';
+import { handleError, getStatusCode, toErrorResponse } from '../src/utils/errors';
 import type { SubjectProperty } from '../src/types/property';
 import type { StreetViewResult } from '../src/types/services';
 
 /**
  * Build the valuation response object
+ * Includes MAT-1.2 address fields and MAT-1.3 EPC availability
  */
 function buildValuationResponse(
   property: SubjectProperty,
@@ -17,17 +19,40 @@ function buildValuationResponse(
   return {
     _milestone: 1,
     _note: 'Full valuation will be available in Milestone 3',
-    address: property.normalizedAddress,
-    uprn: property.uprn,
-    coordinates: {
-      latitude: property.latitude,
-      longitude: property.longitude,
+
+    // MAT-1.2: Normalised address fields
+    subjectProperty: {
+      line_1: property.line_1,
+      line_2: property.line_2,
+      line_3: property.line_3,
+      post_town: property.post_town,
+      postcode: property.postcode,
+      normalizedAddress: property.normalizedAddress,
+      uprn: property.uprn,
+      coordinates: {
+        latitude: property.latitude,
+        longitude: property.longitude,
+      },
     },
-    epc: property.floorAreaSqm
-      ? { floorAreaSqm: property.floorAreaSqm, rating: property.epcRating }
-      : null,
+
+    // MAT-1.3: EPC data with explicit availability flag
+    epc: property.epcAvailable
+      ? {
+          available: true,
+          floorAreaSqm: property.floorAreaSqm,
+          rating: property.epcRating,
+        }
+      : {
+          available: false,
+          missing_epc: true,
+          reason: property.epcMissingReason,
+        },
+
+    // MAT-1.4: Street View URL
     streetViewUrl: streetView.url,
     streetViewAvailable: streetView.available,
+
+    // Placeholder fields for Milestone 3
     marketValue: null,
     offers: null,
     confidence: null,
@@ -72,7 +97,7 @@ async function processValuation(
 
   logger.info('Valuation request processed (M1)', {
     uprn: property.uprn,
-    hasEPC: property.floorAreaSqm !== null,
+    epcAvailable: property.epcAvailable,
   });
 }
 
@@ -115,10 +140,9 @@ export default async function handler(
   try {
     await processValuation(validation.data, origin, res);
   } catch (err) {
-    logger.error('Valuation request failed', { error: (err as Error).message });
-    res.status(500).json({
-      error: 'Internal server error',
-      message: (err as Error).message,
-    });
+    // Centralized error handling - never silent
+    const errorResponse = handleError(err, { endpoint: '/api/valuation', origin });
+    const statusCode = getStatusCode(err);
+    res.status(statusCode).json(errorResponse);
   }
 }

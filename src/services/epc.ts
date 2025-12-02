@@ -5,23 +5,39 @@ import type { HealthCheckResult } from '../types/services';
 
 const BASE_URL = config.urls.propertyData;
 
-// PropertyData API has slower response times (~2 seconds)
-const PROPERTYDATA_TIMEOUT = 3000; // 3 seconds
+// PropertyData API has slower response times (~2-4 seconds)
+const PROPERTYDATA_TIMEOUT = 5000; // 5 seconds for reliability
 
-// EPC data structure
+// EPC data structure (what we return)
 export interface EPCData {
-  floorAreaSqm: number;
+  floorAreaSqm: number | null;
   propertyType: string;
   builtForm: string;
   currentRating: string;
+  score: number;
   inspectionDate: string;
+  address: string;
 }
 
-export interface PropertyDataEPCResponse {
+// PropertyData energy-efficiency API response (postcode lookup)
+interface EnergyEfficiencyRecord {
+  inspection_date: string;
+  address: string;
+  score: number;
+  rating: string;
+}
+
+interface PropertyDataEnergyEfficiencyResponse {
+  status: string;
+  postcode?: string;
+  energy_efficiency?: EnergyEfficiencyRecord[];
+}
+
+// PropertyData energy-efficiency API response (UPRN lookup - different structure)
+interface PropertyDataUPRNResponse {
   status: string;
   uprn?: string;
   address?: string;
-  postcode?: string;
   data?: {
     total_floor_area?: number;
     property_type?: string;
@@ -36,8 +52,8 @@ export type EPCLookupResult =
   | { success: false; error: string };
 
 /**
- * Get floor area from EPC data
- * Tries UPRN first, then falls back to postcode/address search
+ * Get EPC data for a property
+ * Tries UPRN first (more detailed), then falls back to postcode/address matching
  */
 export async function getFloorArea(
   uprn: string | null,
@@ -46,7 +62,7 @@ export async function getFloorArea(
 ): Promise<EPCLookupResult> {
   logger.info('Fetching EPC floor area', { uprn, postcode, addressLine1 });
 
-  // Try UPRN lookup first (more accurate)
+  // Try UPRN lookup first (returns floor area)
   if (uprn) {
     const uprnResult = await getEPCByUPRN(uprn);
     if (uprnResult.success) {
@@ -58,25 +74,24 @@ export async function getFloorArea(
     });
   }
 
-  // Fallback to postcode lookup
-  const postcodeResult = await getEPCByPostcode(postcode);
+  // Fallback to postcode lookup with address matching
+  const postcodeResult = await getEPCByPostcode(postcode, addressLine1);
   if (postcodeResult.success) {
     return postcodeResult;
   }
 
-  // EPC data not available - this is not a critical failure
   return { success: false, error: 'EPC data not available for this property' };
 }
 
 /**
- * Get EPC data by UPRN
+ * Get EPC data by UPRN (returns floor area if available)
  */
 async function getEPCByUPRN(uprn: string): Promise<EPCLookupResult> {
-  const url = `${BASE_URL}/epc?key=${config.propertyDataApiKey}&uprn=${uprn}`;
+  const url = `${BASE_URL}/energy-efficiency?key=${config.propertyDataApiKey}&uprn=${uprn}`;
 
   logger.info('Fetching EPC by UPRN', { uprn });
 
-  const result = await httpRequest<PropertyDataEPCResponse>(url, {
+  const result = await httpRequest<PropertyDataUPRNResponse>(url, {
     timeout: PROPERTYDATA_TIMEOUT,
   });
 
@@ -84,33 +99,39 @@ async function getEPCByUPRN(uprn: string): Promise<EPCLookupResult> {
     return { success: false, error: result.error.message };
   }
 
-  const data = result.response.data;
-  if (data.status !== 'success' || !data.data?.total_floor_area) {
+  const response = result.response.data;
+  if (response.status !== 'success' || !response.data) {
     return { success: false, error: 'No EPC data found for this UPRN' };
   }
 
   return {
     success: true,
     data: {
-      floorAreaSqm: data.data.total_floor_area,
-      propertyType: data.data.property_type || 'unknown',
-      builtForm: data.data.built_form || 'unknown',
-      currentRating: data.data.current_energy_rating || 'unknown',
-      inspectionDate: data.data.lodgement_date || 'unknown',
+      floorAreaSqm: response.data.total_floor_area || null,
+      propertyType: response.data.property_type || 'unknown',
+      builtForm: response.data.built_form || 'unknown',
+      currentRating: response.data.current_energy_rating || 'unknown',
+      score: 0, // UPRN response doesn't include score
+      inspectionDate: response.data.lodgement_date || 'unknown',
+      address: response.address || 'unknown',
     },
   };
 }
 
 /**
- * Get EPC data by postcode
+ * Get EPC data by postcode with address matching
+ * Returns the best matching EPC record
  */
-async function getEPCByPostcode(postcode: string): Promise<EPCLookupResult> {
+async function getEPCByPostcode(
+  postcode: string,
+  addressLine1: string
+): Promise<EPCLookupResult> {
   const cleanPostcode = postcode.replace(/\s/g, '+');
-  const url = `${BASE_URL}/epc?key=${config.propertyDataApiKey}&postcode=${cleanPostcode}`;
+  const url = `${BASE_URL}/energy-efficiency?key=${config.propertyDataApiKey}&postcode=${cleanPostcode}`;
 
-  logger.info('Fetching EPC by postcode', { postcode: cleanPostcode });
+  logger.info('Fetching EPC by postcode', { postcode: cleanPostcode, addressLine1 });
 
-  const result = await httpRequest<PropertyDataEPCResponse>(url, {
+  const result = await httpRequest<PropertyDataEnergyEfficiencyResponse>(url, {
     timeout: PROPERTYDATA_TIMEOUT,
   });
 
@@ -118,43 +139,147 @@ async function getEPCByPostcode(postcode: string): Promise<EPCLookupResult> {
     return { success: false, error: result.error.message };
   }
 
-  const data = result.response.data;
-  if (data.status !== 'success' || !data.data?.total_floor_area) {
+  const response = result.response.data;
+  if (response.status !== 'success' || !response.energy_efficiency?.length) {
     return { success: false, error: 'No EPC data found for this postcode' };
   }
+
+  // Try to find the best matching address
+  const records = response.energy_efficiency;
+  const matchedRecord = findBestAddressMatch(records, addressLine1);
+
+  if (!matchedRecord) {
+    // No match found, use the most recent record
+    const mostRecent = records[0]; // API returns sorted by date descending
+    logger.info('No exact EPC match, using most recent record', {
+      address: mostRecent.address,
+      rating: mostRecent.rating,
+    });
+
+    return {
+      success: true,
+      data: {
+        floorAreaSqm: null, // Postcode lookup doesn't return floor area
+        propertyType: 'unknown',
+        builtForm: 'unknown',
+        currentRating: mostRecent.rating,
+        score: mostRecent.score,
+        inspectionDate: mostRecent.inspection_date,
+        address: mostRecent.address,
+      },
+    };
+  }
+
+  logger.info('EPC match found', {
+    address: matchedRecord.address,
+    rating: matchedRecord.rating,
+    score: matchedRecord.score,
+  });
 
   return {
     success: true,
     data: {
-      floorAreaSqm: data.data.total_floor_area,
-      propertyType: data.data.property_type || 'unknown',
-      builtForm: data.data.built_form || 'unknown',
-      currentRating: data.data.current_energy_rating || 'unknown',
-      inspectionDate: data.data.lodgement_date || 'unknown',
+      floorAreaSqm: null, // Postcode lookup doesn't return floor area
+      propertyType: 'unknown',
+      builtForm: 'unknown',
+      currentRating: matchedRecord.rating,
+      score: matchedRecord.score,
+      inspectionDate: matchedRecord.inspection_date,
+      address: matchedRecord.address,
     },
   };
 }
 
 /**
- * Real health check - actually calls EPC endpoint
- * Note: Uses PropertyData API which has ~2s response time
+ * Find the best matching EPC record for an address
+ */
+function findBestAddressMatch(
+  records: EnergyEfficiencyRecord[],
+  addressLine1: string
+): EnergyEfficiencyRecord | null {
+  const normalizedInput = addressLine1.toLowerCase().trim();
+
+  // Extract building number from input
+  const inputNumber = extractBuildingNumber(normalizedInput);
+
+  // Try exact match first
+  const exactMatch = records.find((r) => {
+    const recordAddr = r.address.toLowerCase();
+    return recordAddr.includes(normalizedInput) || normalizedInput.includes(recordAddr);
+  });
+
+  if (exactMatch) return exactMatch;
+
+  // Try building number match
+  if (inputNumber) {
+    const numberMatch = records.find((r) => {
+      const recordNumber = extractBuildingNumber(r.address.toLowerCase());
+      return recordNumber === inputNumber;
+    });
+    if (numberMatch) return numberMatch;
+  }
+
+  return null;
+}
+
+/**
+ * Extract building number from address
+ */
+function extractBuildingNumber(address: string): string | null {
+  // Match patterns like "36", "36a", "Flat 4", etc.
+  const patterns = [
+    /^(\d+[a-z]?)\s/i, // "36 Charleville Road"
+    /^flat\s+(\d+)/i, // "Flat 4"
+    /,\s*(\d+)\s/i, // ", 36 Charleville"
+  ];
+
+  for (const pattern of patterns) {
+    const match = address.match(pattern);
+    if (match) return match[1].toLowerCase();
+  }
+
+  return null;
+}
+
+/**
+ * Health check for EPC/Energy-Efficiency endpoint
  */
 export async function healthCheck(): Promise<HealthCheckResult> {
   const start = Date.now();
-  const testPostcode = 'W14+9JH';
-  
-  const url = `${BASE_URL}/epc?key=${config.propertyDataApiKey}&postcode=${testPostcode}`;
-  
+  const testPostcode = 'W14 9JH';
+
+  const url = `${BASE_URL}/energy-efficiency?key=${config.propertyDataApiKey}&postcode=${testPostcode.replace(/\s/g, '+')}`;
+
   logger.info('EPC health check', { postcode: testPostcode });
-  
-  const result = await httpRequest<PropertyDataEPCResponse>(url, {
+
+  const result = await httpRequest<PropertyDataEnergyEfficiencyResponse>(url, {
     timeout: PROPERTYDATA_TIMEOUT,
   });
   const latencyMs = Date.now() - start;
 
-  if (result.success) {
-    return { ok: true, latencyMs };
+  if (!result.success) {
+    logger.error('EPC health check failed - HTTP error', { error: result.error.message });
+    return { ok: false, latencyMs, error: result.error.message };
   }
 
-  return { ok: false, latencyMs, error: result.error.message };
+  const response = result.response.data;
+  if (response.status !== 'success') {
+    logger.error('EPC health check failed - API returned non-success', { status: response.status });
+    return { ok: false, latencyMs, error: `EPC API returned status: ${response.status}` };
+  }
+
+  // Verify we got EPC records
+  const recordCount = response.energy_efficiency?.length || 0;
+  if (recordCount === 0) {
+    logger.error('EPC health check failed - no records returned');
+    return { ok: false, latencyMs, error: 'No EPC records returned' };
+  }
+
+  logger.info('EPC health check passed', {
+    postcode: testPostcode,
+    recordCount,
+    firstRating: response.energy_efficiency?.[0]?.rating,
+  });
+
+  return { ok: true, latencyMs };
 }

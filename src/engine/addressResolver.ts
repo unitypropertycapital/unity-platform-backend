@@ -80,14 +80,21 @@ async function lookupAndMatchAddress(
   };
 }
 
+interface EPCResult {
+  floorAreaSqm: number | null;
+  epcRating: string | null;
+  epcAvailable: boolean;
+  epcMissingReason: string | null;
+}
+
 /**
- * Fetch EPC data for floor area enrichment
+ * Fetch EPC data for floor area enrichment (MAT-1.3)
  */
 async function fetchEPCData(
   uprn: string,
   postcode: string,
   addressLine1: string
-): Promise<{ floorAreaSqm: number | null; epcRating: string | null }> {
+): Promise<EPCResult> {
   const epcResult = await getFloorArea(uprn, postcode, addressLine1);
 
   if (epcResult.success) {
@@ -98,11 +105,18 @@ async function fetchEPCData(
     return {
       floorAreaSqm: epcResult.data.floorAreaSqm,
       epcRating: epcResult.data.currentRating,
+      epcAvailable: true,
+      epcMissingReason: null,
     };
   }
 
   logger.warn('EPC data not available', { error: epcResult.error });
-  return { floorAreaSqm: null, epcRating: null };
+  return {
+    floorAreaSqm: null,
+    epcRating: null,
+    epcAvailable: false,
+    epcMissingReason: epcResult.error,
+  };
 }
 
 /**
@@ -137,24 +151,37 @@ export async function resolveSubjectProperty(
   });
 
   // Step 3: Get floor area from EPC (optional)
-  const { floorAreaSqm, epcRating } = await fetchEPCData(
+  const epcData = await fetchEPCData(
     matchedAddress.uprn,
     input.postcode,
     input.addressLine1
   );
 
-  // Step 4: Build result
+  // Step 4: Build result with normalised address fields (MAT-1.2) and EPC status (MAT-1.3)
   const property: SubjectProperty = {
+    // Original input fields
     addressLine1: input.addressLine1,
     addressLine2: input.addressLine2 || '',
     postcode: input.postcode.toUpperCase(),
+    propertyType: input.propertyType,
+
+    // Normalised address fields from Ideal Postcodes (MAT-1.2)
+    line_1: matchedAddress.line_1,
+    line_2: matchedAddress.line_2 || null,
+    line_3: matchedAddress.line_3 || null,
+    post_town: matchedAddress.post_town,
     normalizedAddress,
+
+    // Location identifiers
     uprn: matchedAddress.uprn,
     latitude: matchedAddress.latitude,
     longitude: matchedAddress.longitude,
-    floorAreaSqm,
-    propertyType: input.propertyType,
-    epcRating,
+
+    // EPC data (MAT-1.3)
+    floorAreaSqm: epcData.floorAreaSqm,
+    epcRating: epcData.epcRating,
+    epcAvailable: epcData.epcAvailable,
+    epcMissingReason: epcData.epcMissingReason,
   };
 
   logger.info('Subject property resolved successfully', {

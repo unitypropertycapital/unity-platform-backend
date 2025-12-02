@@ -77,47 +77,97 @@ export async function lookupUPRN(
   return { success: true, address: result.response.data.result };
 }
 
+/**
+ * Extract building number from address string
+ */
+function extractBuildingNumber(address: string): string | null {
+  const match = address.match(/^(\d+[a-zA-Z]?)\s/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * Find matching address from list of addresses
+ * Uses multiple matching strategies for flexibility
+ */
 export function findAddressMatch(
   addresses: IdealPostcodesAddress[],
   addressLine1: string
 ): IdealPostcodesAddress | null {
   const normalizedInput = addressLine1.toLowerCase().trim();
+  const inputBuildingNum = extractBuildingNumber(normalizedInput);
 
-  // Try exact match on line_1 first
+  // Strategy 1: Exact match on line_1
   const exactMatch = addresses.find((addr) => {
     const line1Lower = addr.line_1.toLowerCase().trim();
     return line1Lower === normalizedInput;
   });
-
   if (exactMatch) return exactMatch;
 
-  // Try building number + thoroughfare match
+  // Strategy 2: Building number + thoroughfare match
   const buildingMatch = addresses.find((addr) => {
     const fullLine = `${addr.building_number} ${addr.thoroughfare}`.toLowerCase().trim();
     return fullLine === normalizedInput;
   });
-
   if (buildingMatch) return buildingMatch;
 
-  // Try partial/contains match
+  // Strategy 3: Match by building number only (if unique)
+  if (inputBuildingNum) {
+    const numberMatches = addresses.filter((addr) => {
+      return addr.building_number?.toLowerCase() === inputBuildingNum;
+    });
+    if (numberMatches.length === 1) return numberMatches[0];
+  }
+
+  // Strategy 4: Partial/contains match on line_1
   const partialMatch = addresses.find((addr) => {
     const line1Lower = addr.line_1.toLowerCase();
     return line1Lower.includes(normalizedInput) || normalizedInput.includes(line1Lower);
   });
+  if (partialMatch) return partialMatch;
 
-  return partialMatch || null;
+  // Strategy 5: Match building number with street name containing input
+  if (inputBuildingNum) {
+    const streetMatch = addresses.find((addr) => {
+      const hasMatchingNumber = addr.building_number?.toLowerCase() === inputBuildingNum;
+      const inputStreet = normalizedInput.replace(/^\d+[a-zA-Z]?\s*/, '').trim();
+      const addrStreet = addr.thoroughfare?.toLowerCase() || '';
+      return hasMatchingNumber && (addrStreet.includes(inputStreet) || inputStreet.includes(addrStreet));
+    });
+    if (streetMatch) return streetMatch;
+  }
+
+  return null;
 }
 
+/**
+ * Health check for Ideal Postcodes API
+ * Verifies we can lookup a postcode and get actual address data
+ * No shortcuts - must get real results
+ */
 export async function healthCheck(origin?: string): Promise<HealthCheckResult> {
   const start = Date.now();
-  const testPostcode = 'SW1A1AA'; // Buckingham Palace - always valid
+  // Use Buckingham Palace postcode - always has addresses
+  const testPostcode = 'SW1A1AA';
+
+  logger.info('Ideal Postcodes health check', { postcode: testPostcode });
 
   const result = await lookupPostcode(testPostcode, origin);
   const latencyMs = Date.now() - start;
 
-  if (result.success) {
-    return { ok: true, latencyMs };
+  if (!result.success) {
+    logger.error('Ideal Postcodes health check failed', { error: result.error });
+    return { ok: false, latencyMs, error: result.error };
   }
 
-  return { ok: false, latencyMs, error: result.error };
+  // Verify we got actual addresses back
+  if (!result.addresses || result.addresses.length === 0) {
+    logger.error('Ideal Postcodes health check failed - no addresses returned');
+    return { ok: false, latencyMs, error: 'No addresses returned for test postcode' };
+  }
+
+  logger.info('Ideal Postcodes health check passed', { 
+    addressCount: result.addresses.length 
+  });
+  
+  return { ok: true, latencyMs };
 }

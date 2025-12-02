@@ -5,9 +5,9 @@ import type { HealthCheckResult } from '../types/services';
 
 const BASE_URL = config.urls.propertyData;
 
-// PropertyData API has slower response times (~2 seconds)
+// PropertyData API has slower response times (~2-4 seconds)
 // Use extended timeout to accommodate their processing time
-const PROPERTYDATA_TIMEOUT = 3000; // 3 seconds
+const PROPERTYDATA_TIMEOUT = 5000; // 5 seconds for reliability
 
 // PropertyData API response types
 export interface PropertyDataPricePoint {
@@ -132,12 +132,13 @@ export async function getSoldPrices(
 
 /**
  * Health check for PropertyData API
- * Uses /prices endpoint which is confirmed working
- * Note: PropertyData API has ~2s response time, using extended timeout
+ * Verifies /prices endpoint returns actual property data
+ * No shortcuts - must get real results
  */
 export async function healthCheck(): Promise<HealthCheckResult> {
   const start = Date.now();
-  const testPostcode = 'W14 9JH'; // Known working postcode from their test
+  // Use known working postcode that returns data
+  const testPostcode = 'W14 9JH';
 
   const url = `${BASE_URL}/prices?key=${config.propertyDataApiKey}&postcode=${testPostcode.replace(/\s/g, '+')}`;
   
@@ -148,13 +149,29 @@ export async function healthCheck(): Promise<HealthCheckResult> {
   });
   const latencyMs = Date.now() - start;
 
-  if (result.success && result.response.data.status === 'success') {
-    return { ok: true, latencyMs };
+  // Must have successful HTTP response
+  if (!result.success) {
+    logger.error('PropertyData health check failed - HTTP error', { error: result.error.message });
+    return { ok: false, latencyMs, error: result.error.message };
   }
 
-  const errorMessage = result.success 
-    ? 'API returned non-success status' 
-    : result.error.message;
+  // Must have successful API status
+  const data = result.response.data;
+  if (data.status !== 'success') {
+    logger.error('PropertyData health check failed - API returned non-success', { status: data.status });
+    return { ok: false, latencyMs, error: `PropertyData API returned status: ${data.status}` };
+  }
+
+  // Verify we got actual data back
+  if (!data.data) {
+    logger.error('PropertyData health check failed - no data returned');
+    return { ok: false, latencyMs, error: 'PropertyData API returned no data' };
+  }
+
+  logger.info('PropertyData health check passed', { 
+    postcode: testPostcode,
+    pointsAnalysed: data.data.points_analysed 
+  });
     
-  return { ok: false, latencyMs, error: errorMessage };
+  return { ok: true, latencyMs };
 }

@@ -91,10 +91,26 @@ export interface ServiceHealth {
   message?: string;
 }
 
-export interface HealthCheckResponse {
+// Legacy array-based response (internal use)
+export interface HealthCheckResponseLegacy {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: string;
   services: ServiceHealth[];
+}
+
+// MAT-1.1 compliant response format
+export type ServiceStatus = 'ok' | 'error';
+
+export interface HealthCheckServicesMap {
+  ideal_postcodes: ServiceStatus;
+  property_data: ServiceStatus;
+  epc: ServiceStatus;
+  google_street_view: ServiceStatus;
+}
+
+export interface HealthCheckResponse {
+  status: 'ok' | 'error';
+  services: HealthCheckServicesMap;
 }
 
 // Generic health check result

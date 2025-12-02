@@ -13,7 +13,7 @@ import { healthCheck as streetViewHealth } from '../src/services/streetView';
 import { healthCheck as supabaseHealth } from '../src/services/supabase';
 import { healthCheck as onsHpiHealth } from '../src/services/onsHpi';
 import { resolveSubjectProperty } from '../src/engine/addressResolver';
-import { validateConfig } from '../src/utils/config';
+import { validateConfig, getAutoOrigin } from '../src/utils/config';
 
 async function main() {
   console.log('🔍 Moov Valuation API - Integration Tests\n');
@@ -29,12 +29,16 @@ async function main() {
   }
   console.log('✅ All environment variables configured\n');
 
+  // Auto-detect origin for Ideal Postcodes whitelist
+  const origin = getAutoOrigin();
+  console.log(`🌐 Detected Origin: ${origin || '(none)'}\n`);
+
   // Test each service
   console.log('🧪 Testing External Services:\n');
 
   // 1. Ideal Postcodes
   console.log('1️⃣  Ideal Postcodes (Address Lookup)...');
-  const idealResult = await idealPostcodesHealth();
+  const idealResult = await idealPostcodesHealth(origin);
   console.log(
     `   ${idealResult.ok ? '✅' : '❌'} Status: ${idealResult.ok ? 'OK' : 'FAILED'}`,
     `(${idealResult.latencyMs}ms)`,
@@ -81,16 +85,17 @@ async function main() {
   console.log('\n' + '='.repeat(50));
   console.log('\n🏠 Testing Address Resolution:\n');
 
+  // Test with residential address that has EPC data
   const testAddress = {
-    addressLine1: '24 Meadow View',
-    postcode: 'LE16 9XP',
-    propertyType: 'house' as const,
+    addressLine1: '36 Charleville Road',
+    postcode: 'W14 9JH',
+    propertyType: 'flat' as const,
   };
 
   console.log(`   Input: ${testAddress.addressLine1}, ${testAddress.postcode}`);
   console.log('   Resolving...\n');
 
-  const addressResult = await resolveSubjectProperty(testAddress);
+  const addressResult = await resolveSubjectProperty(testAddress, origin);
 
   if (addressResult.success) {
     console.log('   ✅ Address resolved successfully!');

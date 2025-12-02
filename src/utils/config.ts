@@ -21,6 +21,22 @@ export const config = {
   },
 } as const;
 
+/**
+ * Automatically detect the origin URL from runtime environment
+ * Used for Ideal Postcodes URL whitelist verification
+ * No manual configuration required - detects from Vercel or local runtime
+ */
+export function getAutoOrigin(): string {
+  // Vercel deployments (VERCEL_URL is auto-set by Vercel, not by user)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  // Local development - use PORT if set, otherwise default 3000
+  const port = process.env.PORT || '3000';
+  return `http://localhost:${port}`;
+}
+
 export function validateConfig(): { valid: boolean; missing: string[] } {
   const required = [
     'idealPostcodesApiKey',

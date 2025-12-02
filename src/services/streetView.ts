@@ -69,27 +69,37 @@ export async function getStreetViewImage(
 
 /**
  * Health check for Google Street View API
+ * Verifies the metadata endpoint responds with a valid status
  */
 export async function healthCheck(): Promise<HealthCheckResult> {
   const start = Date.now();
 
-  // Test with known London coordinates (Big Ben area)
+  // Test with known London coordinates (Big Ben area - always has Street View)
   const testLat = 51.5007;
   const testLng = -0.1246;
 
-  try {
-    const result = await getStreetViewImage(testLat, testLng);
-    const latencyMs = Date.now() - start;
+  const metadataUrl = `${BASE_URL}/metadata?location=${testLat},${testLng}&key=${config.googleMapsApiKey}`;
 
-    if (result.available) {
-      return { ok: true, latencyMs };
-    }
+  logger.info('Street View health check', { latitude: testLat, longitude: testLng });
 
-    // API responded but no imagery - still counts as working
-    return { ok: true, latencyMs };
-  } catch (err) {
-    const latencyMs = Date.now() - start;
-    return { ok: false, latencyMs, error: (err as Error).message };
+  const result = await httpRequest<StreetViewMetadata>(metadataUrl);
+  const latencyMs = Date.now() - start;
+
+  if (!result.success) {
+    logger.error('Street View health check failed - HTTP error', { error: result.error.message });
+    return { ok: false, latencyMs, error: result.error.message };
   }
+
+  // For Big Ben coordinates, status must be 'OK' (imagery always available)
+  // No shortcuts - we use a location that definitely has Street View
+  const status = result.response.data.status;
+  
+  if (status !== 'OK') {
+    logger.error('Street View health check failed - unexpected status', { status });
+    return { ok: false, latencyMs, error: `Street View API returned: ${status}` };
+  }
+
+  logger.info('Street View health check passed', { status });
+  return { ok: true, latencyMs };
 }
 
