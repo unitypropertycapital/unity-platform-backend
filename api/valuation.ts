@@ -66,22 +66,23 @@ function buildValuationResponse(
 
 /**
  * Process the valuation request
+ *
+ * NOTE: This function does NOT call Ideal Postcodes directly.
+ * Address must be resolved via /api/address/resolve first,
+ * then passed as addressId.
  */
 async function processValuation(
   data: ValuationRequest,
-  origin: string,
   res: VercelResponse
 ): Promise<void> {
-  const propertyResult = await resolveSubjectProperty(
-    {
-      addressLine1: data.addressLine1,
-      addressLine2: data.addressLine2,
-      postcode: data.postcode,
-      propertyType: data.propertyType,
-      resolvedAddress: data.resolvedAddress, // Pass pre-resolved address if available
-    },
-    origin
-  );
+  const propertyResult = await resolveSubjectProperty({
+    addressLine1: data.addressLine1,
+    addressLine2: data.addressLine2,
+    postcode: data.postcode,
+    propertyType: data.propertyType,
+    addressId: data.addressId, // Recommended: from /api/address/resolve
+    resolvedAddress: data.resolvedAddress, // Deprecated: inline pre-resolved data
+  });
 
   if (!propertyResult.success) {
     logger.warn('Property resolution failed', { error: propertyResult.error });
@@ -142,7 +143,7 @@ export default async function handler(
   }
 
   try {
-    await processValuation(validation.data, origin, res);
+    await processValuation(validation.data, res);
   } catch (err) {
     // Centralized error handling - never silent
     const errorResponse = handleError(err, { endpoint: '/api/valuation', origin });

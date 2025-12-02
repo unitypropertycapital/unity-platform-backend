@@ -106,6 +106,7 @@ export interface HealthCheckServicesMap {
   property_data: ServiceStatus;
   epc: ServiceStatus;
   google_street_view: ServiceStatus;
+  supabase: ServiceStatus;
 }
 
 export interface HealthCheckResponse {

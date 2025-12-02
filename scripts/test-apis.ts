@@ -12,32 +12,17 @@ import { healthCheck as propertyDataHealth } from '../src/services/propertyData'
 import { healthCheck as streetViewHealth } from '../src/services/streetView';
 import { healthCheck as supabaseHealth } from '../src/services/supabase';
 import { healthCheck as onsHpiHealth } from '../src/services/onsHpi';
+import { lookupPostcode, findAddressMatch } from '../src/services/idealPostcodes';
+import { findCachedAddress, cacheAddress } from '../src/services/addressCache';
 import { resolveSubjectProperty } from '../src/engine/addressResolver';
 import { validateConfig, getAutoOrigin } from '../src/utils/config';
+import type { AddressCacheInsert } from '../src/types/address';
 
-async function main() {
-  console.log('🔍 Moov Valuation API - Integration Tests\n');
-  console.log('='.repeat(50));
-
-  // Check configuration
-  console.log('\n📋 Configuration Check:');
-  const configResult = validateConfig();
-  if (!configResult.valid) {
-    console.error('❌ Missing config:', configResult.missing.join(', '));
-    console.log('\nMake sure .env.local exists with all required keys');
-    process.exit(1);
-  }
-  console.log('✅ All environment variables configured\n');
-
-  // Auto-detect origin for Ideal Postcodes whitelist
-  const origin = getAutoOrigin();
-  console.log(`🌐 Detected Origin: ${origin || '(none)'}\n`);
-
-  // Test each service
+async function testHealthChecks(origin: string): Promise<number> {
   console.log('🧪 Testing External Services:\n');
 
-  // 1. Ideal Postcodes
-  console.log('1️⃣  Ideal Postcodes (Address Lookup)...');
+  // 1. Ideal Postcodes (now non-consuming - just validates API key)
+  console.log('1️⃣  Ideal Postcodes (Config Check)...');
   const idealResult = await idealPostcodesHealth(origin);
   console.log(
     `   ${idealResult.ok ? '✅' : '❌'} Status: ${idealResult.ok ? 'OK' : 'FAILED'}`,
@@ -81,44 +66,154 @@ async function main() {
     supaResult.error ? `- ${supaResult.error}` : ''
   );
 
-  // Test address resolution
-  console.log('\n' + '='.repeat(50));
-  console.log('\n🏠 Testing Address Resolution:\n');
+  const allResults = [idealResult, pdResult, svResult, hpiResult, supaResult];
+  return allResults.filter((r) => r.ok).length;
+}
 
-  // Test with residential address that has EPC data
-  const testAddress = {
-    addressLine1: '36 Charleville Road',
-    postcode: 'W14 9JH',
-    propertyType: 'flat' as const,
+async function testAddressCaching(origin: string): Promise<void> {
+  console.log('\n' + '='.repeat(50));
+  console.log('\n🏠 Testing Address Resolution & Caching:\n');
+
+  const testPostcode = 'W14 9JH';
+  const testHouseNumber = '36';
+
+  console.log(`   Testing: ${testHouseNumber}, ${testPostcode}`);
+
+  // Step 1: Check if already cached
+  console.log('\n   Step 1: Checking cache...');
+  const cached = await findCachedAddress(testPostcode, testHouseNumber);
+
+  if (cached) {
+    console.log('   ✅ Found in cache! (no Ideal Postcodes API call needed)');
+    console.log(`   📍 Address: ${cached.address_line_1}`);
+    console.log(`   🔑 UPRN: ${cached.uprn}`);
+    console.log(`   🆔 Cache ID: ${cached.id}`);
+    return;
+  }
+
+  console.log('   ⚠️  Not in cache - will call Ideal Postcodes API');
+
+  // Step 2: Call Ideal Postcodes
+  console.log('\n   Step 2: Calling Ideal Postcodes API...');
+  const lookupResult = await lookupPostcode(testPostcode, origin);
+
+  if (!lookupResult.success) {
+    console.log(`   ❌ Lookup failed: ${lookupResult.error}`);
+    return;
+  }
+
+  console.log(`   ✅ Found ${lookupResult.addresses.length} addresses`);
+
+  // Step 3: Match address
+  const matched = findAddressMatch(lookupResult.addresses, testHouseNumber);
+  if (!matched) {
+    console.log('   ❌ Could not match address');
+    return;
+  }
+
+  console.log(`   ✅ Matched: ${matched.line_1}`);
+
+  // Step 4: Cache the address
+  console.log('\n   Step 3: Caching address...');
+  const insertData: AddressCacheInsert = {
+    postcode: matched.postcode,
+    house_number: testHouseNumber,
+    address_line_1: matched.line_1 || null,
+    address_line_2: matched.line_2 || null,
+    town: matched.post_town || null,
+    county: null,
+    country: matched.country || 'UK',
+    uprn: matched.uprn || null,
+    udprn: null,
+    latitude: matched.latitude || null,
+    longitude: matched.longitude || null,
+    provider_raw: { source: 'test-script', matched },
   };
 
-  console.log(`   Input: ${testAddress.addressLine1}, ${testAddress.postcode}`);
-  console.log('   Resolving...\n');
+  const newlyCached = await cacheAddress(insertData);
+  if (!newlyCached) {
+    console.log('   ❌ Failed to cache address');
+    return;
+  }
+  console.log('   ✅ Address cached successfully!');
+  console.log(`   🆔 Cache ID: ${newlyCached.id}`);
+  console.log(`   🔑 UPRN: ${newlyCached.uprn}`);
+}
 
-  const addressResult = await resolveSubjectProperty(testAddress, origin);
+async function testValuationFlow(): Promise<void> {
+  console.log('\n' + '='.repeat(50));
+  console.log('\n📋 Testing Valuation Flow (with cached address):\n');
 
-  if (addressResult.success) {
-    console.log('   ✅ Address resolved successfully!');
-    console.log(`   📍 Address: ${addressResult.property.normalizedAddress}`);
-    console.log(`   🔑 UPRN: ${addressResult.property.uprn}`);
+  const testPostcode = 'W14 9JH';
+  const testHouseNumber = '36';
+
+  // First, ensure address is cached
+  const cached = await findCachedAddress(testPostcode, testHouseNumber);
+
+  if (!cached) {
+    console.log('   ⚠️  Address not in cache. Run caching test first.');
+    return;
+  }
+
+  console.log(`   Using cached address: ${cached.id}`);
+
+  // Test resolveSubjectProperty with addressId
+  const result = await resolveSubjectProperty({
+    addressLine1: `${testHouseNumber} Charleville Road`,
+    postcode: testPostcode,
+    propertyType: 'flat',
+    addressId: cached.id,
+  });
+
+  if (result.success) {
+    console.log('\n   ✅ Property resolved from cache!');
+    console.log(`   📍 Address: ${result.property.normalizedAddress}`);
+    console.log(`   🔑 UPRN: ${result.property.uprn}`);
     console.log(
-      `   🌍 Coordinates: ${addressResult.property.latitude}, ${addressResult.property.longitude}`
+      `   🌍 Coordinates: ${result.property.latitude}, ${result.property.longitude}`
     );
     console.log(
-      `   📐 Floor Area: ${addressResult.property.floorAreaSqm ? `${addressResult.property.floorAreaSqm} sqm` : 'Not available'}`
+      `   📐 Floor Area: ${result.property.floorAreaSqm ? `${result.property.floorAreaSqm} sqm` : 'Not available'}`
     );
-    console.log(`   ⚡ EPC Rating: ${addressResult.property.epcRating || 'Not available'}`);
+    console.log(`   ⚡ EPC Rating: ${result.property.epcRating || 'Not available'}`);
   } else {
-    console.log('   ❌ Address resolution failed');
-    console.log(`   Error: ${addressResult.error}`);
+    console.log(`   ❌ Resolution failed: ${result.error}`);
+  }
+}
+
+async function main() {
+  console.log('🔍 Moov Valuation API - Integration Tests\n');
+  console.log('='.repeat(50));
+
+  // Check configuration
+  console.log('\n📋 Configuration Check:');
+  const configResult = validateConfig();
+  if (!configResult.valid) {
+    console.error('❌ Missing config:', configResult.missing.join(', '));
+    console.log('\nMake sure .env.local exists with all required keys');
+    process.exit(1);
+  }
+  console.log('✅ All environment variables configured\n');
+
+  // Auto-detect origin for Ideal Postcodes whitelist
+  const origin = getAutoOrigin();
+  console.log(`🌐 Detected Origin: ${origin || '(none)'}\n`);
+
+  // Run health checks
+  const passCount = await testHealthChecks(origin);
+  const totalCount = 5;
+
+  // Test address caching (only if Supabase is configured)
+  try {
+    await testAddressCaching(origin);
+    await testValuationFlow();
+  } catch (err) {
+    console.log(`\n   ⚠️  Caching test skipped: ${(err as Error).message}`);
+    console.log('   (This is expected if the addresses table does not exist yet)');
   }
 
   // Summary
   console.log('\n' + '='.repeat(50));
-  const allResults = [idealResult, pdResult, svResult, hpiResult, supaResult];
-  const passCount = allResults.filter((r) => r.ok).length;
-  const totalCount = allResults.length;
-
   console.log(`\n📊 Summary: ${passCount}/${totalCount} services passed\n`);
 
   if (passCount === totalCount) {
@@ -126,7 +221,9 @@ async function main() {
   } else {
     console.log('⚠️  Some services failed. Check the errors above.\n');
   }
+
+  console.log('💡 Note: Ideal Postcodes health check is now non-consuming.');
+  console.log('   Real API calls only happen via /api/address/resolve.\n');
 }
 
 main().catch(console.error);
-

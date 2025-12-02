@@ -3,26 +3,22 @@ import { healthCheck as idealPostcodesHealth } from '../src/services/idealPostco
 import { healthCheck as propertyDataHealth } from '../src/services/propertyData';
 import { healthCheck as epcHealth } from '../src/services/epc';
 import { healthCheck as streetViewHealth } from '../src/services/streetView';
+import { healthCheck as supabaseHealth } from '../src/services/supabase';
 import { validateConfig } from '../src/utils/config';
 import { logger } from '../src/utils/logger';
 import { getRequestOrigin } from '../src/utils/requestOrigin';
 import { handleError } from '../src/utils/errors';
 import type { HealthCheckResponse, HealthCheckServicesMap, ServiceStatus } from '../src/types/services';
 
-interface HealthCheckResults {
-  ideal_postcodes: ServiceStatus;
-  property_data: ServiceStatus;
-  epc: ServiceStatus;
-  google_street_view: ServiceStatus;
-}
-
-async function runHealthChecks(origin: string): Promise<HealthCheckResults> {
-  const [idealResult, propertyDataResult, epcResult, streetViewResult] = await Promise.allSettled([
-    idealPostcodesHealth(origin),
-    propertyDataHealth(),
-    epcHealth(),
-    streetViewHealth(),
-  ]);
+async function runHealthChecks(origin: string): Promise<HealthCheckServicesMap> {
+  const [idealResult, propertyDataResult, epcResult, streetViewResult, supabaseResult] =
+    await Promise.allSettled([
+      idealPostcodesHealth(origin),
+      propertyDataHealth(),
+      epcHealth(),
+      streetViewHealth(),
+      supabaseHealth(),
+    ]);
 
   const getStatus = (result: PromiseSettledResult<{ ok: boolean }>): ServiceStatus => {
     if (result.status === 'fulfilled' && result.value.ok) {
@@ -36,6 +32,7 @@ async function runHealthChecks(origin: string): Promise<HealthCheckResults> {
     property_data: getStatus(propertyDataResult),
     epc: getStatus(epcResult),
     google_street_view: getStatus(streetViewResult),
+    supabase: getStatus(supabaseResult),
   };
 }
 
@@ -74,6 +71,7 @@ export default async function handler(
         property_data: 'error',
         epc: 'error',
         google_street_view: 'error',
+        supabase: 'error',
       },
     });
     return;
@@ -105,6 +103,7 @@ export default async function handler(
         property_data: 'error',
         epc: 'error',
         google_street_view: 'error',
+        supabase: 'error',
       },
     });
   }

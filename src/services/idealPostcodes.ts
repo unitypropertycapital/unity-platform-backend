@@ -140,34 +140,53 @@ export function findAddressMatch(
 }
 
 /**
- * Health check for Ideal Postcodes API
- * Verifies we can lookup a postcode and get actual address data
- * No shortcuts - must get real results
+ * Validate Ideal Postcodes API key format
+ * Keys typically start with 'ak_' and are 32-38 characters
  */
-export async function healthCheck(origin?: string): Promise<HealthCheckResult> {
+function isValidApiKeyFormat(key: string): boolean {
+  if (!key || typeof key !== 'string') return false;
+  // Ideal Postcodes keys start with 'ak_' or 'iddqd' (test key)
+  return (key.startsWith('ak_') && key.length >= 20) || key === 'iddqd';
+}
+
+/**
+ * Health check for Ideal Postcodes API (non-consuming)
+ *
+ * This health check verifies the API key is configured and valid format.
+ * It does NOT make an API call to preserve credits.
+ *
+ * Real Ideal Postcodes connectivity is tested when /api/address/resolve is called.
+ * Since all address lookups go through that endpoint, any issues will be caught there.
+ */
+export async function healthCheck(_origin?: string): Promise<HealthCheckResult> {
   const start = Date.now();
-  // Use Buckingham Palace postcode - always has addresses
-  const testPostcode = 'SW1A1AA';
 
-  logger.info('Ideal Postcodes health check', { postcode: testPostcode });
+  logger.info('Ideal Postcodes health check (config validation only)');
 
-  const result = await lookupPostcode(testPostcode, origin);
-  const latencyMs = Date.now() - start;
-
-  if (!result.success) {
-    logger.error('Ideal Postcodes health check failed', { error: result.error });
-    return { ok: false, latencyMs, error: result.error };
+  // Check if API key is configured
+  if (!config.idealPostcodesApiKey) {
+    logger.error('Ideal Postcodes API key not configured');
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      error: 'API key not configured',
+    };
   }
 
-  // Verify we got actual addresses back
-  if (!result.addresses || result.addresses.length === 0) {
-    logger.error('Ideal Postcodes health check failed - no addresses returned');
-    return { ok: false, latencyMs, error: 'No addresses returned for test postcode' };
+  // Validate API key format
+  if (!isValidApiKeyFormat(config.idealPostcodesApiKey)) {
+    logger.error('Ideal Postcodes API key has invalid format');
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      error: 'API key has invalid format',
+    };
   }
 
-  logger.info('Ideal Postcodes health check passed', { 
-    addressCount: result.addresses.length 
-  });
-  
-  return { ok: true, latencyMs };
+  logger.info('Ideal Postcodes health check passed (API key configured)');
+
+  return {
+    ok: true,
+    latencyMs: Date.now() - start,
+  };
 }

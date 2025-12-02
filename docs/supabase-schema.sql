@@ -148,3 +148,71 @@ GRANT ALL ON comps TO service_role;
 COMMENT ON TABLE valuations IS 'Stores all property valuation requests and results';
 COMMENT ON TABLE comps IS 'Stores comparable properties used in each valuation';
 
+-- ============================================================================
+-- Addresses Cache Table
+-- Caches resolved addresses from Ideal Postcodes to minimize API calls
+-- Each unique postcode + house_number combination is stored once
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS addresses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Lookup keys (used for cache matching)
+  postcode TEXT NOT NULL,
+  house_number TEXT NOT NULL,
+  
+  -- Resolved address fields
+  address_line_1 TEXT,
+  address_line_2 TEXT,
+  town TEXT,
+  county TEXT,
+  country TEXT DEFAULT 'UK',
+  
+  -- Unique identifiers from Ideal Postcodes
+  uprn TEXT,
+  udprn TEXT,
+  
+  -- Coordinates
+  latitude NUMERIC(10, 7),
+  longitude NUMERIC(10, 7),
+  
+  -- Full provider response for debugging
+  provider_raw JSONB,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Unique index to ensure one row per property (normalized keys)
+CREATE UNIQUE INDEX IF NOT EXISTS addresses_unique_property
+  ON addresses (lower(trim(postcode)), lower(trim(house_number)));
+
+-- Index for UPRN lookups
+CREATE INDEX IF NOT EXISTS idx_addresses_uprn ON addresses(uprn);
+
+-- Index for postcode lookups
+CREATE INDEX IF NOT EXISTS idx_addresses_postcode ON addresses(postcode);
+
+-- Updated timestamp trigger for addresses
+CREATE TRIGGER update_addresses_updated_at
+  BEFORE UPDATE ON addresses
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Row Level Security for addresses
+ALTER TABLE addresses ENABLE ROW LEVEL SECURITY;
+
+-- Service role can do everything
+CREATE POLICY "Service role full access to addresses"
+  ON addresses
+  FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+
+-- Grant permissions
+GRANT ALL ON addresses TO service_role;
+
+-- Comment
+COMMENT ON TABLE addresses IS 'Caches resolved addresses from Ideal Postcodes to minimize API usage';
+

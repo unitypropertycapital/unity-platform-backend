@@ -1,15 +1,296 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Moov Valuation API</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    
+    h1 {
+      font-size: 2rem;
+      color: #60a5fa;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle { color: #94a3b8; margin-bottom: 2rem; }
+    
+    .step {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-left: 4px solid #3b82f6;
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .step-num {
+      background: #3b82f6;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      margin-right: 1rem;
+    }
+    .step-title { font-size: 1.25rem; font-weight: 600; }
+    .step-desc { color: #94a3b8; margin-bottom: 1rem; }
+    
+    .method {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.8rem;
+      margin-right: 0.5rem;
+    }
+    .get { background: #22c55e; color: #000; }
+    .post { background: #3b82f6; color: #fff; }
+    
+    .url {
+      font-family: 'Consolas', monospace;
+      background: #0f172a;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      margin: 0.5rem 0;
+      display: inline-block;
+    }
+    
+    .code-block {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 0.75rem 0;
+      font-family: 'Consolas', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .code-label {
+      color: #64748b;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    
+    .highlight { color: #fbbf24; }
+    .string { color: #a5f3fc; }
+    .key { color: #c4b5fd; }
+    
+    .note {
+      background: #1e3a5f;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    .note-title { color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
+    
+    .divider {
+      text-align: center;
+      color: #475569;
+      margin: 1rem 0;
+      font-size: 1.5rem;
+    }
+    
+    a { color: #60a5fa; }
+    code { 
+      background: #334155; 
+      padding: 0.15rem 0.4rem; 
+      border-radius: 4px;
+      font-family: 'Consolas', monospace;
+    }
+  </style>
 </head>
 <body>
-  <h1>Moov Valuation API</h1>
-  <p>API Endpoints:</p>
-  <ul>
-    <li><a href="/api/health">GET /api/health</a> - Health check</li>
-    <li>POST /api/valuation - Property valuation</li>
-  </ul>
+  <div class="container">
+    <h1>Moov Valuation API</h1>
+    <p class="subtitle">Step-by-step guide to get a property valuation</p>
+
+    <!-- STEP 1: Health Check -->
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <span class="step-title">Check API Status (Optional)</span>
+      </div>
+      <p class="step-desc">Verify all services are running before making requests.</p>
+      
+      <span class="method get">GET</span>
+      <span class="url"><a href="/api/health">/api/health</a></span>
+      
+      <div class="code-label">Response</div>
+      <div class="code-block">{
+  "status": "ok",
+  "services": {
+    "ideal_postcodes": "ok",
+    "property_data": "ok",
+    "epc": "ok",
+    "google_street_view": "ok",
+    "supabase": "ok"
+  }
+}</div>
+    </div>
+
+    <div class="divider">↓</div>
+
+    <!-- STEP 2: Resolve Address -->
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <span class="step-title">Resolve Address</span>
+      </div>
+      <p class="step-desc">
+        Send the postcode and house number. The API will look up the full address 
+        and return an <code>id</code> you'll use in the next step.
+      </p>
+      
+      <span class="method post">POST</span>
+      <span class="url">/api/address/resolve</span>
+      
+      <div class="code-label">Request Body</div>
+      <div class="code-block">{
+  "postcode": "W14 9JH",
+  "houseNumber": "36"
+}</div>
+
+      <div class="code-label">Response</div>
+      <div class="code-block">{
+  <span class="highlight">"id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
+  "postcode": "W14 9JH",
+  "house_number": "36",
+  "address_line_1": "36 Charleville Road",
+  "address_line_2": null,
+  "town": "London",
+  "county": null,
+  "country": "UK",
+  "uprn": "10022866951",
+  "latitude": 51.489012,
+  "longitude": -0.206574,
+  "created_at": "2025-01-15T10:30:00.000Z",
+  "updated_at": "2025-01-15T10:30:00.000Z"
+}</div>
+
+      <div class="note">
+        <div class="note-title">💡 Important</div>
+        Copy the <code>id</code> value - you need it for the valuation request.
+        This address is now cached, so future lookups are instant and free.
+      </div>
+    </div>
+
+    <div class="divider">↓</div>
+
+    <!-- STEP 3: Get Valuation -->
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <span class="step-title">Get Property Valuation</span>
+      </div>
+      <p class="step-desc">
+        Send the <code>addressId</code> from Step 2, along with property details.
+      </p>
+      
+      <span class="method post">POST</span>
+      <span class="url">/api/valuation</span>
+      
+      <div class="code-label">Request Body</div>
+      <div class="code-block">{
+  <span class="highlight">"addressId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
+  "addressLine1": "36 Charleville Road",
+  "postcode": "W14 9JH",
+  "propertyType": "flat",
+  "saleTimeline": "0-8_weeks",
+  "reasonForSelling": "Relocating",
+  "source": "website",
+  "consent": true,
+  "hmac": "your-signature"
+}</div>
+
+      <div class="code-label">Response</div>
+      <div class="code-block">{
+  "subjectProperty": {
+    "line_1": "36 Charleville Road",
+    "line_2": null,
+    "line_3": null,
+    "post_town": "London",
+    "postcode": "W14 9JH",
+    "normalizedAddress": "36 Charleville Road, London, W14 9JH",
+    "uprn": "10022866951",
+    "coordinates": {
+      "latitude": 51.489012,
+      "longitude": -0.206574
+    }
+  },
+  "epc": {
+    "available": true,
+    "floorAreaSqm": 48,
+    "floorAreaSqFt": 517,
+    "habitableRooms": 3,
+    "rating": "C",
+    "score": 70
+  },
+  "streetViewUrl": "https://maps.googleapis.com/maps/api/streetview?...",
+  "streetViewAvailable": true,
+  "marketValue": null,
+  "offers": null,
+  "confidence": null,
+  "comparables": null,
+  "timestamp": "2025-01-15T10:31:00.000Z"
+}</div>
+
+      <div class="note">
+        <div class="note-title">📋 Request Fields Explained</div>
+        <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
+          <li><code>addressId</code> - The id from Step 2 (required)</li>
+          <li><code>addressLine1</code> - Street address like "36 Charleville Road"</li>
+          <li><code>postcode</code> - UK postcode like "W14 9JH"</li>
+          <li><code>propertyType</code> - One of: <code>house</code>, <code>flat</code>, <code>bungalow</code></li>
+          <li><code>saleTimeline</code> - One of: <code>0-8_weeks</code>, <code>8-16_weeks</code>, <code>16+_weeks</code></li>
+          <li><code>reasonForSelling</code> - Free text</li>
+          <li><code>source</code> - Where the request came from</li>
+          <li><code>consent</code> - Must be <code>true</code></li>
+          <li><code>hmac</code> - Security signature</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Test Addresses -->
+    <div class="step" style="border-left-color: #22c55e;">
+      <div class="step-header">
+        <span class="step-num" style="background: #22c55e;">✓</span>
+        <span class="step-title">Test Addresses</span>
+      </div>
+      <p class="step-desc">Use these addresses for testing:</p>
+      
+      <div class="code-block">// London - Flat with EPC data
+{ "postcode": "W14 9JH", "houseNumber": "36" }
+
+// London - 10 Downing Street
+{ "postcode": "SW1A 2AA", "houseNumber": "10" }
+
+// Manchester
+{ "postcode": "M1 1AD", "houseNumber": "50" }
+
+// Birmingham
+{ "postcode": "B1 1AA", "houseNumber": "1" }</div>
+    </div>
+
+    <p style="color: #64748b; margin-top: 2rem; text-align: center; font-size: 0.85rem;">
+      Moov Valuation API • Milestone 1 • Address caching enabled
+    </p>
+  </div>
 </body>
 </html>
-
