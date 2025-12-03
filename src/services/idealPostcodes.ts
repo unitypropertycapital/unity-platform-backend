@@ -81,42 +81,77 @@ export async function lookupUPRN(
  * Extract building number from address string
  */
 function extractBuildingNumber(address: string): string | null {
-  const match = address.match(/^(\d+[a-zA-Z]?)\s/);
+  // Match number at start (with optional letter suffix) or just a pure number
+  const match = address.match(/^(\d+[a-zA-Z]?)\s/) || address.match(/^(\d+[a-zA-Z]?)$/);
   return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * Normalize house number for comparison (lowercase, trimmed)
+ */
+function normalizeHouseNum(num: string | undefined | null): string {
+  return (num || '').toLowerCase().trim();
 }
 
 /**
  * Find matching address from list of addresses
  * Uses multiple matching strategies for flexibility
+ * 
+ * @param addresses - List of addresses from Ideal Postcodes
+ * @param houseNumberOrAddress - Either just "36" or full "36 Charleville Road"
  */
 export function findAddressMatch(
   addresses: IdealPostcodesAddress[],
-  addressLine1: string
+  houseNumberOrAddress: string
 ): IdealPostcodesAddress | null {
-  const normalizedInput = addressLine1.toLowerCase().trim();
+  const normalizedInput = houseNumberOrAddress.toLowerCase().trim();
   const inputBuildingNum = extractBuildingNumber(normalizedInput);
+  
+  // Check if input is JUST a house number (no street name)
+  const isJustHouseNumber = /^\d+[a-zA-Z]?$/.test(normalizedInput);
 
-  // Strategy 1: Exact match on line_1
+  // Strategy 1: Direct building_number match (most common for house number lookups)
+  if (isJustHouseNumber || inputBuildingNum) {
+    const targetNum = normalizeHouseNum(isJustHouseNumber ? normalizedInput : inputBuildingNum);
+    
+    // Match by building_number field
+    const buildingNumMatches = addresses.filter((addr) => {
+      return normalizeHouseNum(addr.building_number) === targetNum;
+    });
+    if (buildingNumMatches.length === 1) return buildingNumMatches[0];
+    if (buildingNumMatches.length > 1) {
+      // Multiple matches - return first residential one, or just first
+      return buildingNumMatches[0];
+    }
+
+    // Match by line_1 starting with the number
+    const line1Match = addresses.find((addr) => {
+      const line1 = addr.line_1.toLowerCase();
+      return line1.startsWith(targetNum + ' ') || line1.startsWith(targetNum + ',');
+    });
+    if (line1Match) return line1Match;
+    
+    // Match by building_name containing the number
+    const buildingNameMatch = addresses.find((addr) => {
+      const name = (addr.building_name || '').toLowerCase();
+      return name.includes(targetNum) || name.startsWith(targetNum);
+    });
+    if (buildingNameMatch) return buildingNameMatch;
+  }
+
+  // Strategy 2: Exact match on line_1 (for full address input)
   const exactMatch = addresses.find((addr) => {
     const line1Lower = addr.line_1.toLowerCase().trim();
     return line1Lower === normalizedInput;
   });
   if (exactMatch) return exactMatch;
 
-  // Strategy 2: Building number + thoroughfare match
+  // Strategy 3: Building number + thoroughfare match
   const buildingMatch = addresses.find((addr) => {
     const fullLine = `${addr.building_number} ${addr.thoroughfare}`.toLowerCase().trim();
     return fullLine === normalizedInput;
   });
   if (buildingMatch) return buildingMatch;
-
-  // Strategy 3: Match by building number only (if unique)
-  if (inputBuildingNum) {
-    const numberMatches = addresses.filter((addr) => {
-      return addr.building_number?.toLowerCase() === inputBuildingNum;
-    });
-    if (numberMatches.length === 1) return numberMatches[0];
-  }
 
   // Strategy 4: Partial/contains match on line_1
   const partialMatch = addresses.find((addr) => {
@@ -125,15 +160,10 @@ export function findAddressMatch(
   });
   if (partialMatch) return partialMatch;
 
-  // Strategy 5: Match building number with street name containing input
-  if (inputBuildingNum) {
-    const streetMatch = addresses.find((addr) => {
-      const hasMatchingNumber = addr.building_number?.toLowerCase() === inputBuildingNum;
-      const inputStreet = normalizedInput.replace(/^\d+[a-zA-Z]?\s*/, '').trim();
-      const addrStreet = addr.thoroughfare?.toLowerCase() || '';
-      return hasMatchingNumber && (addrStreet.includes(inputStreet) || inputStreet.includes(addrStreet));
-    });
-    if (streetMatch) return streetMatch;
+  // Strategy 5: If nothing matches, return first address as fallback
+  // (useful for single-property postcodes)
+  if (addresses.length === 1) {
+    return addresses[0];
   }
 
   return null;
