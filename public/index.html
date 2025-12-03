@@ -170,24 +170,28 @@
       <div class="code-label">Response</div>
       <div class="code-block">{
   <span class="highlight">"id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
-  "postcode": "W14 9JH",
+  "postcode": "W149JH",
   "house_number": "36",
   "address_line_1": "36 Charleville Road",
   "address_line_2": null,
   "town": "London",
-  "county": null,
-  "country": "UK",
-  "uprn": "10022866951",
-  "latitude": 51.489012,
-  "longitude": -0.206574,
-  "created_at": "2025-01-15T10:30:00.000Z",
-  "updated_at": "2025-01-15T10:30:00.000Z"
+  "county": "London",
+  "country": "England",
+  "uprn": "34059043",
+  "udprn": "25963057",
+  "latitude": 51.488885,
+  "longitude": -0.2078126,
+  "created_at": "2025-12-03T06:10:50.526Z",
+  "updated_at": "2025-12-03T06:10:50.526Z"
 }</div>
 
       <div class="note">
         <div class="note-title">💡 Important</div>
         Copy the <code>id</code> value - you need it for the valuation request.
         This address is now cached, so future lookups are instant and free.
+        <br><br>
+        <strong>Note:</strong> Postcodes are stored normalized (uppercase, no spaces) for consistent caching.
+        You can send <code>"W14 9JH"</code> or <code>"W149JH"</code> - both work.
       </div>
     </div>
 
@@ -206,17 +210,17 @@
       <span class="method post">POST</span>
       <span class="url">/api/valuation</span>
       
-      <div class="code-label">Request Body</div>
+      <div class="code-label">Request Body (all fields required)</div>
       <div class="code-block">{
-  <span class="highlight">"addressId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
+  <span class="highlight">"addressId": "5cdf606b-0585-4c78-839a-6ef859e6d6d0"</span>,
   "addressLine1": "36 Charleville Road",
   "postcode": "W14 9JH",
   "propertyType": "flat",
-  "saleTimeline": "0-8_weeks",
+  "saleTimeline": "8-16_weeks",
   "reasonForSelling": "Relocating",
   "source": "website",
   "consent": true,
-  "hmac": "your-signature"
+  "hmac": "your-hmac-signature"
 }</div>
 
       <div class="code-label">Response</div>
