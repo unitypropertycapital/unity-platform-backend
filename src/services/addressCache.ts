@@ -39,7 +39,7 @@ export async function findCachedAddress(
   const { data, error } = await client
     .from('addresses')
     .select('*')
-    .ilike('postcode', normPostcode.replace(/(.{3,4})$/, ' $1')) // Match with or without space
+    .eq('postcode', normPostcode) // Exact match on normalized postcode (no spaces)
     .ilike('house_number', normHouseNumber)
     .limit(1)
     .single();
@@ -144,7 +144,8 @@ export function mapIdealPostcodesToAddressData(
   providerRaw: Record<string, unknown>
 ): AddressInsertData {
   return {
-    postcode: postcode.trim().toUpperCase(),
+    // Normalize postcode: uppercase, no spaces (for consistent cache lookups)
+    postcode: postcode.trim().toUpperCase().replace(/\s/g, ''),
     house_number: houseNumber.trim().toLowerCase(),
     address_line_1: idealAddress.line_1 || null,
     address_line_2: idealAddress.line_2 || null,
