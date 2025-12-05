@@ -262,15 +262,15 @@ function extractBuildingNumber(address: string): string | null {
 export async function healthCheck(): Promise<HealthCheckResult> {
   const start = Date.now();
   const testPostcode = 'W14 9JH';
-
+  
   // Check both endpoints
   const [epcUrl, floorUrl] = [
     `${BASE_URL}/energy-efficiency?key=${config.propertyDataApiKey}&postcode=${testPostcode.replace(/\s/g, '+')}`,
     `${BASE_URL}/floor-areas?key=${config.propertyDataApiKey}&postcode=${testPostcode.replace(/\s/g, '+')}`,
   ];
-
+  
   logger.info('EPC health check', { postcode: testPostcode });
-
+  
   const [epcResult, floorResult] = await Promise.all([
     httpRequest<PropertyDataEnergyEfficiencyResponse>(epcUrl, { timeout: PROPERTYDATA_TIMEOUT }),
     httpRequest<PropertyDataFloorAreasResponse>(floorUrl, { timeout: PROPERTYDATA_TIMEOUT }),
@@ -304,5 +304,5 @@ export async function healthCheck(): Promise<HealthCheckResult> {
     floorRecords: floorCount,
   });
 
-  return { ok: true, latencyMs };
+    return { ok: true, latencyMs };
 }

@@ -51,11 +51,21 @@ export interface PropertyDataSoldPrice {
   distance: string;
 }
 
+// PropertyData sold-prices/sold-price-data response structure
+// Based on API documentation: returns sales within radius of postcode
 export interface PropertyDataSoldPricesResponse {
   status: string;
-  postcode: string;
-  data: PropertyDataSoldPrice[];
-  process_time: string;
+  postcode?: string;
+  postcode_type?: string;
+  result_count?: number;
+  data?: PropertyDataSoldPrice[] | {
+    points_analysed?: number;
+    radius?: string;
+    raw_data?: PropertyDataSoldPrice[];
+  };
+  raw_data?: PropertyDataSoldPrice[];
+  process_time?: string;
+  message?: string;
 }
 
 export type PricesResult =
@@ -100,34 +110,83 @@ export async function getPrices(
 
 /**
  * Get sold property prices (Land Registry data) for a postcode
- * Uses the /sold-prices endpoint
+ * Uses the /sold-prices endpoint with proper parameters
  */
 export async function getSoldPrices(
   postcode: string,
   maxAge?: number
 ): Promise<SoldPricesResult> {
-  const cleanPostcode = postcode.replace(/\s/g, '+');
+  // Format postcode with + for spaces (PropertyData format)
+  const cleanPostcode = postcode.replace(/\s/g, '+').toUpperCase();
+  
+  // Build URL with max_age parameter
   let url = `${BASE_URL}/sold-prices?key=${config.propertyDataApiKey}&postcode=${cleanPostcode}`;
   
   if (maxAge) {
     url += `&max_age=${maxAge}`;
   }
 
-  logger.info('Fetching sold prices via PropertyData', { postcode: cleanPostcode, maxAge });
 
   const result = await httpRequest<PropertyDataSoldPricesResponse>(url, {
     timeout: PROPERTYDATA_TIMEOUT,
   });
 
   if (!result.success) {
+    logger.error('PropertyData HTTP request failed', { error: result.error.message });
     return { success: false, error: result.error.message };
   }
 
-  if (result.response.data.status !== 'success') {
-    return { success: false, error: 'Failed to fetch sold prices' };
+  const responseData = result.response.data;
+
+  // Check for error status
+  if (responseData?.status === 'error') {
+    const errorMsg = (responseData as unknown as Record<string, unknown>)?.message || 'Unknown error';
+    logger.error('PropertyData API error', { errorMsg, responseData });
+    return { success: false, error: String(errorMsg) };
   }
 
-  return { success: true, sales: result.response.data.data || [] };
+  // Try to find the sales array in various possible locations
+  let salesArray: PropertyDataSoldPrice[] = [];
+  
+  // The PropertyData /sold-prices response structure:
+  // { status: "success", postcode: "...", data: [...sales...] }
+  if (Array.isArray(responseData?.data)) {
+    salesArray = responseData.data as PropertyDataSoldPrice[];
+  }
+  // Check raw_data
+  else if (Array.isArray(responseData?.raw_data)) {
+    salesArray = responseData.raw_data;
+  }
+  // Check if data is an object with nested array
+  else if (responseData?.data && typeof responseData.data === 'object' && !Array.isArray(responseData.data)) {
+    const dataObj = responseData.data as Record<string, unknown>;
+    
+    if (Array.isArray(dataObj.raw_data)) {
+      salesArray = dataObj.raw_data as PropertyDataSoldPrice[];
+    } else if (Array.isArray(dataObj.sales)) {
+      salesArray = dataObj.sales as PropertyDataSoldPrice[];
+    } else if (Array.isArray(dataObj.results)) {
+      salesArray = dataObj.results as PropertyDataSoldPrice[];
+    }
+  }
+  // Check top-level fields that might be arrays
+  else {
+    for (const [key, value] of Object.entries(responseData || {})) {
+      if (Array.isArray(value) && value.length > 0 && value[0]?.price) {
+        salesArray = value as PropertyDataSoldPrice[];
+        break;
+      }
+    }
+  }
+  
+  // Single clean log for sold prices result
+  if (salesArray.length > 0) {
+    logger.info(`🏠 PropertyData: ${salesArray.length} sold prices for ${cleanPostcode}`);
+  } else {
+    logger.warn(`🏠 PropertyData: no sold prices for ${cleanPostcode}`);
+  }
+  
+  return { success: true, sales: salesArray };
 }
 
 /**

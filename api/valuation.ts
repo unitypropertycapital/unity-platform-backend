@@ -3,22 +3,27 @@ import { logger } from '../src/utils/logger';
 import { validateValuationRequest, ValuationRequest } from '../src/types/request';
 import { resolveSubjectProperty } from '../src/engine/addressResolver';
 import { getStreetViewImage } from '../src/services/streetView';
+import { fetchComparables, formatComparablesResponse } from '../src/engine/comparables';
 import { getRequestOrigin } from '../src/utils/requestOrigin';
-import { handleError, getStatusCode, toErrorResponse } from '../src/utils/errors';
+import { handleError, getStatusCode } from '../src/utils/errors';
 import type { SubjectProperty } from '../src/types/property';
 import type { StreetViewResult } from '../src/types/services';
+import type { ComparablesResult } from '../src/types/comparable';
 
 /**
  * Build the valuation response object
- * Includes MAT-1.2 address fields and MAT-1.3 EPC availability
+ * Includes MAT-1.2 address fields, MAT-1.3 EPC, and MAT-2 comparables
  */
 function buildValuationResponse(
   property: SubjectProperty,
-  streetView: StreetViewResult
+  streetView: StreetViewResult,
+  comparablesResult: ComparablesResult
 ): Record<string, unknown> {
+  const comparables = formatComparablesResponse(comparablesResult);
+  
   return {
-    _milestone: 1,
-    _note: 'Full valuation will be available in Milestone 3',
+    _milestone: 2,
+    _note: 'Full valuation calculations will be available in Milestone 3',
 
     // MAT-1.2: Normalised address fields
     subjectProperty: {
@@ -55,11 +60,17 @@ function buildValuationResponse(
     streetViewUrl: streetView.url,
     streetViewAvailable: streetView.available,
 
+    // MAT-2: Comparables with filtering and diagnostics
+    comparables,
+    
+    // Desk review flag (from comparables)
+    deskReview: comparablesResult.deskReview,
+    deskReviewReason: comparablesResult.deskReviewReason,
+
     // Placeholder fields for Milestone 3
     marketValue: null,
     offers: null,
     confidence: null,
-    comparables: null,
     timestamp: new Date().toISOString(),
   };
 }
@@ -95,22 +106,43 @@ async function processValuation(
   }
 
   const property = propertyResult.property;
-  const streetViewResult = await getStreetViewImage(property.latitude, property.longitude);
-  const response = buildValuationResponse(property, streetViewResult);
+  
+  // Fetch street view and comparables in parallel
+  const [streetViewResult, comparablesResult] = await Promise.all([
+    getStreetViewImage(property.latitude, property.longitude),
+    fetchComparables({
+      postcode: property.postcode,
+      latitude: property.latitude,
+      longitude: property.longitude,
+      propertyType: data.propertyType,
+      floorAreaSqm: property.floorAreaSqm,
+    }),
+  ]);
+  
+  const response = buildValuationResponse(property, streetViewResult, comparablesResult);
 
   res.status(200).json(response);
 
-  logger.info('Valuation request processed (M1)', {
+  logger.info('Valuation request processed (M2)', {
     uprn: property.uprn,
     epcAvailable: property.epcAvailable,
+    comparablesKept: comparablesResult.totalKept,
+    comparablesRejected: comparablesResult.totalRejected,
+    radiusUsed: comparablesResult.radiusUsed,
+    deskReview: comparablesResult.deskReview,
   });
 }
 
 /**
  * POST /api/valuation
  *
- * Milestone 1: Basic endpoint with address resolution only
- * Full valuation logic will be implemented in Milestone 3
+ * Milestone 2: Address resolution + Comparable data fetching & filtering
+ * - Fetches comparables from PropertyData (Land Registry data)
+ * - Applies radius expansion (0.25 → 0.5 → 0.75 → 1.0 miles)
+ * - Filters by property type, recency, size, and outliers
+ * - Returns kept/rejected comps with reasons
+ * 
+ * Full valuation calculations will be implemented in Milestone 3
  */
 export default async function handler(
   req: VercelRequest,

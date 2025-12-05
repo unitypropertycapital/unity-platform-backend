@@ -27,13 +27,13 @@ async function runHealthChecks(origin: string): Promise<HealthCheckServicesMap> 
     return 'error';
   };
 
-  return {
+    return {
     ideal_postcodes: getStatus(idealResult),
     property_data: getStatus(propertyDataResult),
     epc: getStatus(epcResult),
     google_street_view: getStatus(streetViewResult),
     supabase: getStatus(supabaseResult),
-  };
+    };
 }
 
 export default async function handler(

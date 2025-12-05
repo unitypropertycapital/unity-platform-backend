@@ -3,298 +3,1022 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Moov Valuation API</title>
+  <title>Moov API Documentation</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      background: #0d1117;
+      color: #c9d1d9;
       line-height: 1.6;
-      padding: 2rem;
+      padding: 40px 20px;
+      max-width: 900px;
+      margin: 0 auto;
     }
-    .container { max-width: 800px; margin: 0 auto; }
     
-    h1 {
-      font-size: 2rem;
-      color: #60a5fa;
-      margin-bottom: 0.5rem;
-    }
-    .subtitle { color: #94a3b8; margin-bottom: 2rem; }
-    
-    .step {
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-      border-left: 4px solid #3b82f6;
-    }
-    .step-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
-    .step-num {
-      background: #3b82f6;
-      color: white;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      margin-right: 1rem;
-    }
-    .step-title { font-size: 1.25rem; font-weight: 600; }
-    .step-desc { color: #94a3b8; margin-bottom: 1rem; }
-    
-    .method {
-      display: inline-block;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
+    h1 { 
+      font-size: 28px; 
       font-weight: 600;
-      font-size: 0.8rem;
-      margin-right: 0.5rem;
+      color: #f0f6fc;
+      margin-bottom: 8px; 
     }
-    .get { background: #22c55e; color: #000; }
-    .post { background: #3b82f6; color: #fff; }
     
-    .url {
-      font-family: 'Consolas', monospace;
-      background: #0f172a;
-      padding: 0.5rem 1rem;
+    .subtitle { 
+      color: #8b949e; 
+      margin-bottom: 32px; 
+      font-size: 14px;
+    }
+    
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      padding: 12px 16px;
       border-radius: 6px;
-      margin: 0.5rem 0;
-      display: inline-block;
+      margin-bottom: 32px;
+      font-size: 13px;
     }
     
-    .code-block {
-      background: #0f172a;
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: #3fb950;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .status-bar a { 
+      color: #58a6ff; 
+      text-decoration: none;
+      margin-left: auto;
+    }
+    
+    .status-bar a:hover { text-decoration: underline; }
+    
+    /* Flow Section */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 40px;
+      flex-wrap: wrap;
+    }
+    
+    .flow-step {
+      background: #21262d;
+      border: 1px solid #30363d;
+      padding: 16px 24px;
       border-radius: 8px;
-      padding: 1rem;
-      margin: 0.75rem 0;
-      font-family: 'Consolas', monospace;
-      font-size: 0.9rem;
-      overflow-x: auto;
-      white-space: pre;
-    }
-    .code-label {
-      color: #64748b;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      margin-bottom: 0.25rem;
-      font-family: 'Segoe UI', sans-serif;
-    }
-    
-    .highlight { color: #fbbf24; }
-    .string { color: #a5f3fc; }
-    .key { color: #c4b5fd; }
-    
-    .note {
-      background: #1e3a5f;
-      border-radius: 8px;
-      padding: 1rem;
-      margin-top: 1rem;
-      font-size: 0.9rem;
-    }
-    .note-title { color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
-    
-    .divider {
       text-align: center;
-      color: #475569;
-      margin: 1rem 0;
-      font-size: 1.5rem;
     }
     
-    a { color: #60a5fa; }
-    code { 
-      background: #334155; 
-      padding: 0.15rem 0.4rem; 
+    .flow-step .num {
+      display: block;
+      font-size: 11px;
+      color: #8b949e;
+      margin-bottom: 4px;
+    }
+    
+    .flow-step .endpoint {
+      font-size: 13px;
+      color: #58a6ff;
+    }
+    
+    .flow-arrow {
+      color: #484f58;
+      font-size: 20px;
+    }
+    
+    /* Section Headers */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 48px 0 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #21262d;
+    }
+    
+    .section-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+    
+    .method-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
       border-radius: 4px;
-      font-family: 'Consolas', monospace;
+      text-transform: uppercase;
+    }
+    
+    .method-badge.post { background: #238636; color: #fff; }
+    .method-badge.get { background: #1f6feb; color: #fff; }
+    
+    .endpoint-path {
+      font-size: 16px;
+      color: #f0f6fc;
+    }
+    
+    /* Schema Blocks */
+    .schema-section {
+      margin-bottom: 24px;
+    }
+    
+    .schema-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #8b949e;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .schema-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+    }
+    
+    .schema-title.input::before { background: #f0883e; }
+    .schema-title.output::before { background: #a371f7; }
+    
+    .schema-table {
+      width: 100%;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .schema-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b949e;
+      padding: 12px 16px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+    }
+    
+    .schema-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #21262d;
+      font-size: 13px;
+      vertical-align: top;
+    }
+    
+    .schema-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .field-name {
+      color: #79c0ff;
+      font-weight: 500;
+    }
+    
+    .field-type {
+      color: #ffa657;
+      font-size: 12px;
+    }
+    
+    .field-required {
+      color: #f85149;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    
+    .field-desc {
+      color: #8b949e;
+    }
+    
+    .field-note {
+      color: #7ee787;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    
+    /* Code Blocks */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 12px;
+      overflow-x: auto;
+      line-height: 1.7;
+    }
+    
+    .k { color: #79c0ff; }  /* key */
+    .s { color: #a5d6ff; }  /* string */
+    .n { color: #ffa657; }  /* number */
+    .b { color: #ff7b72; }  /* boolean */
+    .c { color: #8b949e; }  /* comment */
+    .null { color: #ff7b72; }
+    
+    /* Collapsible */
+    details {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    
+    summary {
+      padding: 14px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #c9d1d9;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      user-select: none;
+    }
+    
+    summary:hover { background: #21262d; }
+    
+    summary::before {
+      content: '▶';
+      font-size: 10px;
+      color: #484f58;
+      transition: transform 0.2s;
+    }
+    
+    details[open] summary::before {
+      transform: rotate(90deg);
+    }
+    
+    details .content {
+      padding: 0 16px 16px;
+    }
+    
+    /* Info Boxes */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    
+    .info-box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 14px;
+    }
+    
+    .info-box label {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b949e;
+      margin-bottom: 6px;
+    }
+    
+    .info-box span {
+      font-size: 13px;
+      color: #f0f6fc;
+    }
+    
+    /* Tags */
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    
+    .tag {
+      background: #21262d;
+      border: 1px solid #30363d;
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      color: #c9d1d9;
+    }
+    
+    /* Nested Objects */
+    .nested {
+      margin-left: 20px;
+      padding-left: 16px;
+      border-left: 2px solid #30363d;
+    }
+    
+    .nested-label {
+      font-size: 11px;
+      color: #8b949e;
+      margin: 8px 0 4px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Moov Valuation API</h1>
-    <p class="subtitle">Step-by-step guide to get a property valuation</p>
 
-    <!-- STEP 1: Health Check -->
-    <div class="step">
-      <div class="step-header">
-        <span class="step-num">1</span>
-        <span class="step-title">Check API Status (Optional)</span>
-      </div>
-      <p class="step-desc">Verify all services are running before making requests.</p>
-      
-      <span class="method get">GET</span>
-      <span class="url"><a href="/api/health">/api/health</a></span>
-      
-      <div class="code-label">Response</div>
-      <div class="code-block">{
-  "status": "ok",
-  "services": {
-    "ideal_postcodes": "ok",
-    "property_data": "ok",
-    "epc": "ok",
-    "google_street_view": "ok",
-    "supabase": "ok"
-  }
-}</div>
+  <h1>Moov Valuation API</h1>
+  <p class="subtitle">Property valuation with address resolution, EPC data, and comparable analysis</p>
+  
+  <div class="status-bar">
+    <span class="status-dot"></span>
+    <span>All systems operational</span>
+    <a href="/api/health">Health Check →</a>
+  </div>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="flow-step">
+      <span class="num">STEP 1</span>
+      <span class="endpoint">POST /api/address/resolve</span>
     </div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">
+      <span class="num">STEP 2</span>
+      <span class="endpoint">POST /api/valuation</span>
+    </div>
+  </div>
 
-    <div class="divider">↓</div>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ENDPOINT 1: ADDRESS RESOLVE -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span class="method-badge post">POST</span>
+    <span class="endpoint-path">/api/address/resolve</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 24px;">
+    Resolve a UK address and get a unique ID for valuation. Addresses are cached - subsequent lookups are instant.
+  </p>
 
-    <!-- STEP 2: Resolve Address -->
-    <div class="step">
-      <div class="step-header">
-        <span class="step-num">2</span>
-        <span class="step-title">Resolve Address</span>
-      </div>
-      <p class="step-desc">
-        Send the postcode and house number. The API will look up the full address 
-        and return an <code>id</code> you'll use in the next step.
-      </p>
-      
-      <span class="method post">POST</span>
-      <span class="url">/api/address/resolve</span>
-      
-      <div class="code-label">Request Body</div>
-      <div class="code-block">{
-  "postcode": "W14 9JH",
-  "houseNumber": "36"
-}</div>
+  <!-- REQUEST SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title input">Request Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">postcode</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">UK postcode (e.g. "W14 9JH")</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">houseNumber</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">House number or name (e.g. "36" or "Flat 2")</span></td>
+      </tr>
+    </table>
+  </div>
 
-      <div class="code-label">Response</div>
-      <div class="code-block">{
-  <span class="highlight">"id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"</span>,
-  "postcode": "W149JH",
-  "house_number": "36",
-  "address_line_1": "36 Charleville Road",
-  "address_line_2": null,
-  "town": "London",
-  "county": "London",
-  "country": "England",
-  "uprn": "34059043",
-  "udprn": "25963057",
-  "latitude": 51.488885,
-  "longitude": -0.2078126,
-  "created_at": "2025-12-03T06:10:50.526Z",
-  "updated_at": "2025-12-03T06:10:50.526Z"
-}</div>
+  <!-- RESPONSE SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title output">Response Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">id</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">UUID - <strong>use this as addressId in /api/valuation</strong></span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">postcode</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Normalized postcode (no spaces, uppercase)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">house_number</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Normalized house number</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">address_line_1</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">First line of address</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">address_line_2</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Second line of address</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">town</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Town or city</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">county</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">County</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">country</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Country (e.g. "England")</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">uprn</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Unique Property Reference Number</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">udprn</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Unique Delivery Point Reference Number</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">latitude</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">Latitude coordinate</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">longitude</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">Longitude coordinate</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">created_at</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">ISO 8601 timestamp</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">updated_at</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">ISO 8601 timestamp</span></td>
+      </tr>
+    </table>
+  </div>
 
-      <div class="note">
-        <div class="note-title">💡 Important</div>
-        Copy the <code>id</code> value - you need it for the valuation request.
-        This address is now cached, so future lookups are instant and free.
-        <br><br>
-        <strong>Note:</strong> Postcodes are stored normalized (uppercase, no spaces) for consistent caching.
-        You can send <code>"W14 9JH"</code> or <code>"W149JH"</code> - both work.
+  <!-- EXAMPLES -->
+  <details>
+    <summary>📥 Example Request</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"postcode"</span>: <span class="s">"W14 9JH"</span>,
+  <span class="k">"houseNumber"</span>: <span class="s">"36"</span>
+}</pre>
       </div>
     </div>
+  </details>
 
-    <div class="divider">↓</div>
-
-    <!-- STEP 3: Get Valuation -->
-    <div class="step">
-      <div class="step-header">
-        <span class="step-num">3</span>
-        <span class="step-title">Get Property Valuation</span>
+  <details>
+    <summary>📤 Example Response</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"5cdf606b-0585-4c78-839a-6ef859e6d6d0"</span>,
+  <span class="k">"postcode"</span>: <span class="s">"W149JH"</span>,
+  <span class="k">"house_number"</span>: <span class="s">"36"</span>,
+  <span class="k">"address_line_1"</span>: <span class="s">"36 Charleville Road"</span>,
+  <span class="k">"address_line_2"</span>: <span class="null">null</span>,
+  <span class="k">"town"</span>: <span class="s">"London"</span>,
+  <span class="k">"county"</span>: <span class="s">"London"</span>,
+  <span class="k">"country"</span>: <span class="s">"England"</span>,
+  <span class="k">"uprn"</span>: <span class="s">"34059043"</span>,
+  <span class="k">"udprn"</span>: <span class="s">"25963057"</span>,
+  <span class="k">"latitude"</span>: <span class="n">51.488885</span>,
+  <span class="k">"longitude"</span>: <span class="n">-0.2078126</span>,
+  <span class="k">"created_at"</span>: <span class="s">"2025-12-03T06:10:50.526Z"</span>,
+  <span class="k">"updated_at"</span>: <span class="s">"2025-12-03T06:10:50.526Z"</span>
+}</pre>
       </div>
-      <p class="step-desc">
-        Send the <code>addressId</code> from Step 2, along with property details.
-      </p>
-      
-      <span class="method post">POST</span>
-      <span class="url">/api/valuation</span>
-      
-      <div class="code-label">Request Body (all fields required)</div>
-      <div class="code-block">{
-  <span class="highlight">"addressId": "5cdf606b-0585-4c78-839a-6ef859e6d6d0"</span>,
-  "addressLine1": "36 Charleville Road",
-  "postcode": "W14 9JH",
-  "propertyType": "flat",
-  "saleTimeline": "8-16_weeks",
-  "reasonForSelling": "Relocating",
-  "source": "website",
-  "consent": true,
-  "hmac": "your-hmac-signature"
-}</div>
+    </div>
+  </details>
 
-      <div class="code-label">Response</div>
-      <div class="code-block">{
-  "subjectProperty": {
-    "line_1": "36 Charleville Road",
-    "line_2": null,
-    "line_3": null,
-    "post_town": "London",
-    "postcode": "W14 9JH",
-    "normalizedAddress": "36 Charleville Road, London, W14 9JH",
-    "uprn": "10022866951",
-    "coordinates": {
-      "latitude": 51.489012,
-      "longitude": -0.206574
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ENDPOINT 2: VALUATION -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span class="method-badge post">POST</span>
+    <span class="endpoint-path">/api/valuation</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 24px;">
+    Get comprehensive property data including EPC, Street View, and comparable sales analysis.
+  </p>
+
+  <!-- REQUEST SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title input">Request Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">addressId</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">UUID from /api/address/resolve response</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">addressLine1</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Street address (e.g. "36 Charleville Road")</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">postcode</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">UK postcode</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">propertyType</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">"flat" | "house" | "bungalow"</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">saleTimeline</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">"0-8_weeks" | "8-16_weeks" | "16+_weeks"</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">reasonForSelling</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Free text reason</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">source</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Origin identifier (e.g. "website", "app")</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">consent</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">boolean</span></td>
+        <td><span class="field-desc">Must be true</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">hmac</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Use "placeholder" for now (HMAC coming later)</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- RESPONSE SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title output">Response Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">SUBJECT PROPERTY</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.line_1</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Address line 1</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.line_2</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Address line 2</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.post_town</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Town/city</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.postcode</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Postcode</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.normalizedAddress</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Full formatted address</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.uprn</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Unique Property Reference Number</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.coordinates.latitude</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Latitude</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">subjectProperty.coordinates.longitude</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Longitude</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">EPC DATA</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.available</span></td>
+        <td><span class="field-type">boolean</span></td>
+        <td><span class="field-desc">Whether EPC data was found</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.floorAreaSqm</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">Floor area in square meters</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.floorAreaSqFt</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">Floor area in square feet</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.habitableRooms</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">Number of habitable rooms</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.rating</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">EPC rating (A-G)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">epc.score</span></td>
+        <td><span class="field-type">number | null</span></td>
+        <td><span class="field-desc">EPC score (1-100)</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">STREET VIEW</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">streetViewUrl</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Google Street View image URL</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">streetViewAvailable</span></td>
+        <td><span class="field-type">boolean</span></td>
+        <td><span class="field-desc">Whether Street View is available</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">COMPARABLES</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.radiusUsed</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Search radius in miles (0.25-1.0)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.radiusAttempts</span></td>
+        <td><span class="field-type">array</span></td>
+        <td><span class="field-desc">Debug: comp count at each radius</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.totalFound</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Total comps before filtering</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.totalKept</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Comps that passed filters</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.totalRejected</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Comps that failed filters</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.kept</span></td>
+        <td><span class="field-type">array</span></td>
+        <td><span class="field-desc">Array of valid comparables (see schema below)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.rejected</span></td>
+        <td><span class="field-type">array</span></td>
+        <td><span class="field-desc">Array of rejected comparables with reasons</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">comparables.stats</span></td>
+        <td><span class="field-type">object</span></td>
+        <td><span class="field-desc">Statistics (mean, median, etc.)</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">STATUS</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">deskReview</span></td>
+        <td><span class="field-type">boolean</span></td>
+        <td><span class="field-desc">True if manual review needed (insufficient comps)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">deskReviewReason</span></td>
+        <td><span class="field-type">string | null</span></td>
+        <td><span class="field-desc">Reason for desk review</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">marketValue</span></td>
+        <td><span class="field-type">null</span></td>
+        <td><span class="field-desc">Coming in Milestone 3</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">timestamp</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">ISO 8601 response timestamp</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- COMPARABLE SCHEMA -->
+  <details>
+    <summary>🏠 Comparable Object Schema (kept array)</summary>
+    <div class="content">
+      <table class="schema-table">
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr>
+          <td><span class="field-name">address</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Full address</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">postcode</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Postcode</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">salePrice</span></td>
+          <td><span class="field-type">number</span></td>
+          <td><span class="field-desc">Sale price in GBP</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">saleDate</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Sale date (YYYY-MM-DD)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">propertyType</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">flat | house | detached | semi-detached | terraced</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">floorAreaSqm</span></td>
+          <td><span class="field-type">number | null</span></td>
+          <td><span class="field-desc">Floor area in sqm (null if unknown)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">distanceMiles</span></td>
+          <td><span class="field-type">number</span></td>
+          <td><span class="field-desc">Distance from subject in miles</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">pricePerSqm</span></td>
+          <td><span class="field-type">number | null</span></td>
+          <td><span class="field-desc">Price per sqm (null if no floor area)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">pricePerSqft</span></td>
+          <td><span class="field-type">number | null</span></td>
+          <td><span class="field-desc">Price per sqft (null if no floor area)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">ageMonths</span></td>
+          <td><span class="field-type">number</span></td>
+          <td><span class="field-desc">Months since sale</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">source</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">"PD" (PropertyData) or "LR" (Land Registry)</span></td>
+        </tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>❌ Rejected Object Schema (rejected array)</summary>
+    <div class="content">
+      <table class="schema-table">
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr>
+          <td><span class="field-name">address</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Full address</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">salePrice</span></td>
+          <td><span class="field-type">number</span></td>
+          <td><span class="field-desc">Sale price in GBP</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">saleDate</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Sale date (YYYY-MM-DD)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">reason</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Rejection code (see table below)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">details</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Human-readable explanation</span></td>
+        </tr>
+      </table>
+      
+      <div style="margin-top: 16px;">
+        <div style="font-size: 12px; color: #8b949e; margin-bottom: 8px;">Rejection Codes:</div>
+        <table class="schema-table">
+          <tr><th>Code</th><th>Meaning</th></tr>
+          <tr><td><span class="field-name">wrong_property_type</span></td><td>Property type doesn't match subject</td></tr>
+          <tr><td><span class="field-name">too_old</span></td><td>Sale older than 24 months</td></tr>
+          <tr><td><span class="field-name">size_mismatch</span></td><td>Floor area differs by more than ±20%</td></tr>
+          <tr><td><span class="field-name">outlier_high</span></td><td>Price per sqm statistically too high</td></tr>
+          <tr><td><span class="field-name">outlier_low</span></td><td>Price per sqm statistically too low</td></tr>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>📥 Example Request</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"addressId"</span>: <span class="s">"5cdf606b-0585-4c78-839a-6ef859e6d6d0"</span>,
+  <span class="k">"addressLine1"</span>: <span class="s">"36 Charleville Road"</span>,
+  <span class="k">"postcode"</span>: <span class="s">"W14 9JH"</span>,
+  <span class="k">"propertyType"</span>: <span class="s">"flat"</span>,
+  <span class="k">"saleTimeline"</span>: <span class="s">"8-16_weeks"</span>,
+  <span class="k">"reasonForSelling"</span>: <span class="s">"Relocating"</span>,
+  <span class="k">"source"</span>: <span class="s">"website"</span>,
+  <span class="k">"consent"</span>: <span class="b">true</span>,
+  <span class="k">"hmac"</span>: <span class="s">"placeholder"</span>
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>📤 Example Response (Full)</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"_milestone"</span>: <span class="n">2</span>,
+  <span class="k">"subjectProperty"</span>: {
+    <span class="k">"line_1"</span>: <span class="s">"36 Charleville Road"</span>,
+    <span class="k">"line_2"</span>: <span class="null">null</span>,
+    <span class="k">"line_3"</span>: <span class="null">null</span>,
+    <span class="k">"post_town"</span>: <span class="s">"London"</span>,
+    <span class="k">"postcode"</span>: <span class="s">"W149JH"</span>,
+    <span class="k">"normalizedAddress"</span>: <span class="s">"36 Charleville Road, London, W149JH"</span>,
+    <span class="k">"uprn"</span>: <span class="s">"34059043"</span>,
+    <span class="k">"coordinates"</span>: {
+      <span class="k">"latitude"</span>: <span class="n">51.488885</span>,
+      <span class="k">"longitude"</span>: <span class="n">-0.2078126</span>
     }
   },
-  "epc": {
-    "available": true,
-    "floorAreaSqm": 48,
-    "floorAreaSqFt": 517,
-    "habitableRooms": 3,
-    "rating": "C",
-    "score": 70
+  <span class="k">"epc"</span>: {
+    <span class="k">"available"</span>: <span class="b">true</span>,
+    <span class="k">"floorAreaSqm"</span>: <span class="n">48</span>,
+    <span class="k">"floorAreaSqFt"</span>: <span class="n">517</span>,
+    <span class="k">"habitableRooms"</span>: <span class="n">3</span>,
+    <span class="k">"rating"</span>: <span class="s">"C"</span>,
+    <span class="k">"score"</span>: <span class="n">70</span>
   },
-  "streetViewUrl": "https://maps.googleapis.com/maps/api/streetview?...",
-  "streetViewAvailable": true,
-  "marketValue": null,
-  "offers": null,
-  "confidence": null,
-  "comparables": null,
-  "timestamp": "2025-01-15T10:31:00.000Z"
-}</div>
-
-      <div class="note">
-        <div class="note-title">📋 Request Fields Explained</div>
-        <ul style="margin-top: 0.5rem; padding-left: 1.25rem;">
-          <li><code>addressId</code> - The id from Step 2 (required)</li>
-          <li><code>addressLine1</code> - Street address like "36 Charleville Road"</li>
-          <li><code>postcode</code> - UK postcode like "W14 9JH"</li>
-          <li><code>propertyType</code> - One of: <code>house</code>, <code>flat</code>, <code>bungalow</code></li>
-          <li><code>saleTimeline</code> - One of: <code>0-8_weeks</code>, <code>8-16_weeks</code>, <code>16+_weeks</code></li>
-          <li><code>reasonForSelling</code> - Free text</li>
-          <li><code>source</code> - Where the request came from</li>
-          <li><code>consent</code> - Must be <code>true</code></li>
-          <li><code>hmac</code> - Security signature</li>
-        </ul>
+  <span class="k">"streetViewUrl"</span>: <span class="s">"https://maps.googleapis.com/..."</span>,
+  <span class="k">"streetViewAvailable"</span>: <span class="b">true</span>,
+  <span class="k">"comparables"</span>: {
+    <span class="k">"radiusUsed"</span>: <span class="n">0.25</span>,
+    <span class="k">"radiusAttempts"</span>: [
+      { <span class="k">"radius"</span>: <span class="n">0.25</span>, <span class="k">"rawComps"</span>: <span class="n">20</span>, <span class="k">"afterFilters"</span>: <span class="n">14</span> }
+    ],
+    <span class="k">"totalFound"</span>: <span class="n">20</span>,
+    <span class="k">"totalKept"</span>: <span class="n">14</span>,
+    <span class="k">"totalRejected"</span>: <span class="n">6</span>,
+    <span class="k">"deskReview"</span>: <span class="b">false</span>,
+    <span class="k">"deskReviewReason"</span>: <span class="null">null</span>,
+    <span class="k">"kept"</span>: [
+      {
+        <span class="k">"address"</span>: <span class="s">"Flat 1, 36, Charleville Road, W14 9JH"</span>,
+        <span class="k">"postcode"</span>: <span class="s">""</span>,
+        <span class="k">"salePrice"</span>: <span class="n">650000</span>,
+        <span class="k">"saleDate"</span>: <span class="s">"2025-04-04"</span>,
+        <span class="k">"propertyType"</span>: <span class="s">"flat"</span>,
+        <span class="k">"floorAreaSqm"</span>: <span class="null">null</span>,
+        <span class="k">"distanceMiles"</span>: <span class="n">0.001</span>,
+        <span class="k">"pricePerSqm"</span>: <span class="null">null</span>,
+        <span class="k">"pricePerSqft"</span>: <span class="null">null</span>,
+        <span class="k">"ageMonths"</span>: <span class="n">8</span>,
+        <span class="k">"source"</span>: <span class="s">"PD"</span>
+      }
+    ],
+    <span class="k">"rejected"</span>: [
+      {
+        <span class="k">"address"</span>: <span class="s">"Flat 5, 36, Charleville Road, W14 9JH"</span>,
+        <span class="k">"postcode"</span>: <span class="s">""</span>,
+        <span class="k">"salePrice"</span>: <span class="n">610000</span>,
+        <span class="k">"saleDate"</span>: <span class="s">"2023-08-08"</span>,
+        <span class="k">"reason"</span>: <span class="s">"too_old"</span>,
+        <span class="k">"details"</span>: <span class="s">"Sale date 28 months ago, max allowed is 24 months"</span>
+      }
+    ],
+    <span class="k">"stats"</span>: {
+      <span class="k">"count"</span>: <span class="n">14</span>,
+      <span class="k">"meanPricePerSqm"</span>: <span class="null">null</span>,
+      <span class="k">"medianPricePerSqm"</span>: <span class="null">null</span>,
+      <span class="k">"minPricePerSqm"</span>: <span class="null">null</span>,
+      <span class="k">"maxPricePerSqm"</span>: <span class="null">null</span>,
+      <span class="k">"stdDevPricePerSqm"</span>: <span class="null">null</span>
+    }
+  },
+  <span class="k">"deskReview"</span>: <span class="b">false</span>,
+  <span class="k">"deskReviewReason"</span>: <span class="null">null</span>,
+  <span class="k">"marketValue"</span>: <span class="null">null</span>,
+  <span class="k">"offers"</span>: <span class="null">null</span>,
+  <span class="k">"confidence"</span>: <span class="null">null</span>,
+  <span class="k">"timestamp"</span>: <span class="s">"2025-12-05T22:00:00.000Z"</span>
+}</pre>
       </div>
     </div>
+  </details>
 
-    <!-- Test Addresses -->
-    <div class="step" style="border-left-color: #22c55e;">
-      <div class="step-header">
-        <span class="step-num" style="background: #22c55e;">✓</span>
-        <span class="step-title">Test Addresses</span>
-      </div>
-      <p class="step-desc">Use these addresses for testing:</p>
-      
-      <div class="code-block">// London - Flat with EPC data
-{ "postcode": "W14 9JH", "houseNumber": "36" }
-
-// London - 10 Downing Street
-{ "postcode": "SW1A 2AA", "houseNumber": "10" }
-
-// Manchester
-{ "postcode": "M1 1AD", "houseNumber": "50" }
-
-// Birmingham
-{ "postcode": "B1 1AA", "houseNumber": "1" }</div>
-    </div>
-
-    <p style="color: #64748b; margin-top: 2rem; text-align: center; font-size: 0.85rem;">
-      Moov Valuation API • Milestone 1 • Address caching enabled
-    </p>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- HEALTH CHECK -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span class="method-badge get">GET</span>
+    <span class="endpoint-path">/api/health</span>
   </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px;">
+    Check status of all integrated services.
+  </p>
+
+  <details>
+    <summary>📤 Example Response</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"status"</span>: <span class="s">"ok"</span>,
+  <span class="k">"services"</span>: {
+    <span class="k">"ideal_postcodes"</span>: <span class="s">"ok"</span>,
+    <span class="k">"property_data"</span>: <span class="s">"ok"</span>,
+    <span class="k">"epc"</span>: <span class="s">"ok"</span>,
+    <span class="k">"google_street_view"</span>: <span class="s">"ok"</span>,
+    <span class="k">"supabase"</span>: <span class="s">"ok"</span>
+  },
+  <span class="k">"timestamp"</span>: <span class="s">"2025-12-05T22:00:00.000Z"</span>
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TEST DATA -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header" style="border: none;">
+    <span style="font-size: 18px;">🧪 Test Addresses</span>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <label>Urban (Good Data)</label>
+      <span>W14 9JH / 36</span>
+    </div>
+    <div class="info-box">
+      <label>Urban (Good Data)</label>
+      <span>NG3 5RD / 12</span>
+    </div>
+    <div class="info-box">
+      <label>Rural (Sparse)</label>
+      <span>GU5 9DN / 1</span>
+    </div>
+    <div class="info-box">
+      <label>Rural (Sparse)</label>
+      <span>DL12 0SS / 1</span>
+    </div>
+  </div>
+
+  <p style="color: #484f58; font-size: 12px; text-align: center; margin-top: 48px;">
+    Moov Valuation API v2.0 • Milestone 2 Complete
+  </p>
+
 </body>
 </html>

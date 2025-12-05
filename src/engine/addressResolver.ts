@@ -24,7 +24,7 @@ export interface AddressInput {
    * If provided, skips address lookup
    */
   resolvedAddress?: PreResolvedAddress;
-}
+  }
 
 interface EPCResult {
   floorAreaSqm: number | null;
@@ -251,32 +251,32 @@ export async function resolveSubjectProperty(
     );
 
     logger.info('Address resolved from pre-resolved data', {
-      uprn: matchedAddress.uprn,
-      latitude: matchedAddress.latitude,
-      longitude: matchedAddress.longitude,
-    });
+    uprn: matchedAddress.uprn,
+    latitude: matchedAddress.latitude,
+    longitude: matchedAddress.longitude,
+  });
 
     // Get EPC data
     const epcData = await fetchEPCData(
-      matchedAddress.uprn,
-      input.postcode,
-      input.addressLine1
-    );
+    matchedAddress.uprn,
+    input.postcode,
+    input.addressLine1
+  );
 
     // Build subject property
-    const property: SubjectProperty = {
-      addressLine1: input.addressLine1,
-      addressLine2: input.addressLine2 || '',
-      postcode: input.postcode.toUpperCase(),
+  const property: SubjectProperty = {
+    addressLine1: input.addressLine1,
+    addressLine2: input.addressLine2 || '',
+    postcode: input.postcode.toUpperCase(),
       propertyType: input.propertyType,
       line_1: matchedAddress.line_1,
       line_2: matchedAddress.line_2 || null,
       line_3: matchedAddress.line_3 || null,
       post_town: matchedAddress.post_town,
-      normalizedAddress,
-      uprn: matchedAddress.uprn,
-      latitude: matchedAddress.latitude,
-      longitude: matchedAddress.longitude,
+    normalizedAddress,
+    uprn: matchedAddress.uprn,
+    latitude: matchedAddress.latitude,
+    longitude: matchedAddress.longitude,
       floorAreaSqm: epcData.floorAreaSqm,
       floorAreaSqFt: epcData.floorAreaSqFt,
       habitableRooms: epcData.habitableRooms,
@@ -284,14 +284,14 @@ export async function resolveSubjectProperty(
       epcScore: epcData.epcScore,
       epcAvailable: epcData.epcAvailable,
       epcMissingReason: epcData.epcMissingReason,
-    };
+  };
 
-    logger.info('Subject property resolved successfully', {
-      uprn: property.uprn,
-      hasFloorArea: property.floorAreaSqm !== null,
-    });
+  logger.info('Subject property resolved successfully', {
+    uprn: property.uprn,
+    hasFloorArea: property.floorAreaSqm !== null,
+  });
 
-    return { success: true, property };
+  return { success: true, property };
   }
 
   // Neither addressId nor resolvedAddress provided

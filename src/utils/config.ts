@@ -19,6 +19,30 @@ export const config = {
     propertyData: 'https://api.propertydata.co.uk',
     streetView: 'https://maps.googleapis.com/maps/api/streetview',
   },
+
+  // Comparable search settings
+  comparables: {
+    // Radius expansion steps in miles
+    radiusSteps: [0.25, 0.5, 0.75, 1.0] as readonly number[],
+    
+    // Minimum number of valid comps required (below this triggers deskReview)
+    minComps: 3,
+    
+    // Maximum age of sales in months (primary filter)
+    maxRecencyMonths: 24,
+    
+    // Fallback recency if not enough comps found
+    fallbackRecencyMonths: 36,
+    
+    // Size tolerance: ±20% of subject floor area
+    sizeTolerance: 0.20,
+    
+    // IQR multiplier for outlier detection (1.5 = standard, 3.0 = extreme only)
+    outlierIqrMultiplier: 1.5,
+    
+    // Maximum age for sold prices API query (in months)
+    maxAgeMonths: 36,
+  },
 } as const;
 
 /**
