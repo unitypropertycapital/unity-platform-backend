@@ -21,6 +21,8 @@ export type {
 // Re-export utilities
 export { calculateDistanceMiles, isWithinRadius } from './distance';
 export { normalizePropertyType, calculateAgeMonths } from './normalizer';
+export { enrichWithFloorArea } from './enricher';
+export { applyBasicFilters, filterComparables, filterWithFallback } from './filter';
 
 /**
  * Fetch and filter comparables for a subject property

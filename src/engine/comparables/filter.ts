@@ -58,14 +58,15 @@ function isPropertyTypeMatch(subjectType: string, compType: string): boolean {
 
 /**
  * Check if floor area is within tolerance
+ * Note: compSqm is guaranteed to be non-null at this point (enforced by floor area filter)
  */
 function isSizeWithinTolerance(
   subjectSqm: number | null,
-  compSqm: number | null,
+  compSqm: number,
   tolerance: number
 ): boolean {
-  // If either is missing, we can't filter by size - allow through
-  if (!subjectSqm || !compSqm) {
+  // If subject has no floor area (no EPC), we can't filter by size - allow through
+  if (!subjectSqm) {
     return true;
   }
   
@@ -157,6 +158,66 @@ function reject(
 }
 
 /**
+ * Pre-filter result for basic filters (property type + recency)
+ * Used before floor area enrichment to reduce API calls
+ */
+export interface PreFilterResult {
+  passed: NormalizedComparable[];
+  rejected: RejectedComparable[];
+}
+
+/**
+ * Apply basic filters BEFORE floor area enrichment
+ * This reduces the number of comps we need to enrich with floor area data
+ * 
+ * Filters: property type, recency, valid coordinates
+ */
+export function applyBasicFilters(
+  comps: NormalizedComparable[],
+  propertyType: string,
+  maxRecencyMonths: number
+): PreFilterResult {
+  const passed: NormalizedComparable[] = [];
+  const rejected: RejectedComparable[] = [];
+  
+  for (const comp of comps) {
+    // Validate required data
+    if (!comp.latitude || !comp.longitude || !comp.salePrice) {
+      rejected.push(reject(comp, 'invalid_data', 'Missing required fields (coordinates or price)'));
+      continue;
+    }
+    
+    // Property type filter
+    if (!isPropertyTypeMatch(propertyType, comp.propertyType)) {
+      rejected.push(
+        reject(
+          comp,
+          'wrong_property_type',
+          `Subject is ${propertyType}, comp is ${comp.propertyType}`
+        )
+      );
+      continue;
+    }
+    
+    // Recency filter
+    if (comp.ageMonths > maxRecencyMonths) {
+      rejected.push(
+        reject(
+          comp,
+          'too_old',
+          `Sale date ${comp.ageMonths} months ago, max allowed is ${maxRecencyMonths} months`
+        )
+      );
+      continue;
+    }
+    
+    passed.push(comp);
+  }
+  
+  return { passed, rejected };
+}
+
+/**
  * Filter comparables based on configuration
  */
 export function filterComparables(
@@ -167,7 +228,7 @@ export function filterComparables(
   const rejected: RejectedComparable[] = [];
   
   
-  // Step 1: Apply basic filters (type, recency, size)
+  // Step 1: Apply basic filters (type, recency, floor area, size)
   for (const comp of comps) {
     // Validate required data
     if (!comp.latitude || !comp.longitude || !comp.salePrice) {
@@ -199,7 +260,32 @@ export function filterComparables(
       continue;
     }
     
-    // Size similarity filter
+    // Floor area filter - REQUIRED for £/sqm calculation
+    // Comps without floor area cannot be used for valuation
+    if (comp.floorAreaSqm === null || comp.floorAreaSqm <= 0) {
+      rejected.push(
+        reject(
+          comp,
+          'no_floor_area',
+          'Missing floor area - cannot calculate £/sqm for valuation'
+        )
+      );
+      continue;
+    }
+    
+    // At this point, comp has valid floor area, so pricePerSqm should be valid
+    if (comp.pricePerSqm === null) {
+      rejected.push(
+        reject(
+          comp,
+          'no_floor_area',
+          'Could not calculate £/sqm - invalid floor area data'
+        )
+      );
+      continue;
+    }
+    
+    // Size similarity filter (now both subject and comp have floor area)
     if (!isSizeWithinTolerance(filterConfig.floorAreaSqm, comp.floorAreaSqm, filterConfig.sizeTolerance)) {
       const tolerance = Math.round(filterConfig.sizeTolerance * 100);
       rejected.push(
@@ -216,9 +302,8 @@ export function filterComparables(
   }
   
   // Step 2: Apply IQR outlier detection on kept comps
-  const pricesPerSqm = kept
-    .map((c) => c.pricePerSqm)
-    .filter((p): p is number => p !== null);
+  // All kept comps now have valid pricePerSqm (guaranteed by floor area filter above)
+  const pricesPerSqm = kept.map((c) => c.pricePerSqm as number);
   
   if (pricesPerSqm.length >= 4) {
     const bounds = calculateIQRBounds(pricesPerSqm, filterConfig.outlierIqrMultiplier);
@@ -227,33 +312,32 @@ export function filterComparables(
     const finalKept: NormalizedComparable[] = [];
     
     for (const comp of kept) {
-      if (comp.pricePerSqm !== null) {
-        if (comp.pricePerSqm < bounds.lower) {
-          rejected.push(
-            reject(
-              comp,
-              'outlier_low',
-              `Price £${comp.pricePerSqm}/sqm is below IQR lower bound (£${Math.round(bounds.lower)}/sqm), mean is £${Math.round(mean)}/sqm`
-            )
-          );
-          continue;
-        }
-        
-        if (comp.pricePerSqm > bounds.upper) {
-          rejected.push(
-            reject(
-              comp,
-              'outlier_high',
-              `Price £${comp.pricePerSqm}/sqm is above IQR upper bound (£${Math.round(bounds.upper)}/sqm), mean is £${Math.round(mean)}/sqm`
-            )
-          );
-          continue;
-        }
+      const pricePerSqm = comp.pricePerSqm as number;
+      
+      if (pricePerSqm < bounds.lower) {
+        rejected.push(
+          reject(
+            comp,
+            'outlier_low',
+            `Price £${Math.round(pricePerSqm)}/sqm is below IQR lower bound (£${Math.round(bounds.lower)}/sqm), mean is £${Math.round(mean)}/sqm`
+          )
+        );
+        continue;
+      }
+      
+      if (pricePerSqm > bounds.upper) {
+        rejected.push(
+          reject(
+            comp,
+            'outlier_high',
+            `Price £${Math.round(pricePerSqm)}/sqm is above IQR upper bound (£${Math.round(bounds.upper)}/sqm), mean is £${Math.round(mean)}/sqm`
+          )
+        );
+        continue;
       }
       
       finalKept.push(comp);
     }
-    
     
     return {
       kept: finalKept,
@@ -262,7 +346,7 @@ export function filterComparables(
     };
   }
   
-  // Not enough data for outlier detection
+  // Not enough comps for outlier detection (< 4), keep all that passed basic filters
   return {
     kept,
     rejected,

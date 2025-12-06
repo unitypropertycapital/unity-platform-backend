@@ -103,6 +103,29 @@ export function fromLandRegistry(sale: LandRegistrySale): RawComparable {
 }
 
 /**
+ * Extract UK postcode from address string
+ * Matches formats like "SW11 2BJ", "W14 9JH", "NG22 0NX"
+ */
+function extractPostcodeFromAddress(address: string): string {
+  // UK postcode regex - matches at end of address or anywhere in string
+  const postcodeRegex = /\b([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})\b/i;
+  const match = address.match(postcodeRegex);
+  
+  if (match) {
+    // Normalize to format "AB1 2CD" with space
+    const raw = match[1].toUpperCase().replace(/\s+/g, '');
+    if (raw.length >= 5) {
+      const outward = raw.slice(0, -3);
+      const inward = raw.slice(-3);
+      return `${outward} ${inward}`;
+    }
+    return raw;
+  }
+  
+  return '';
+}
+
+/**
  * Convert PropertyData sold price to raw comparable
  * Handles missing/undefined fields gracefully
  */
@@ -111,9 +134,12 @@ export function fromPropertyData(sale: PropertyDataSoldPrice): RawComparable {
   const lat = sale.lat ? parseFloat(String(sale.lat)) : 0;
   const lng = sale.lng ? parseFloat(String(sale.lng)) : 0;
   
+  // Extract postcode from address if not provided separately
+  const postcode = sale.postcode || extractPostcodeFromAddress(sale.address || '');
+  
   return {
     address: sale.address || 'Unknown address',
-    postcode: sale.postcode || '',
+    postcode,
     salePrice: sale.price || 0,
     saleDate: sale.date || new Date().toISOString().split('T')[0],
     propertyType: normalizePropertyType(sale.type),

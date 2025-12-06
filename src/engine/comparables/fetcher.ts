@@ -7,11 +7,13 @@ import { config } from '../../utils/config';
 import { logger } from '../../utils/logger';
 import { getSoldPrices } from '../../services/propertyData';
 import { fromPropertyData, processComparables } from './normalizer';
-import { filterWithFallback } from './filter';
+import { filterWithFallback, applyBasicFilters } from './filter';
 import { isWithinRadius } from './distance';
+import { enrichWithFloorArea } from './enricher';
 import type {
   RawComparable,
   NormalizedComparable,
+  RejectedComparable,
   ComparablesResult,
   ComparableFetchParams,
   ComparableFilterConfig,
@@ -59,6 +61,13 @@ function filterByRadius(
 /**
  * Fetch comparables with radius expansion
  * Starts at smallest radius and expands if not enough comps found
+ * 
+ * OPTIMIZED FLOW (with floor area enrichment):
+ * 1. Fetch raw comps from PropertyData
+ * 2. Normalize all comps
+ * 3. Apply basic filters to ALL comps (type + recency)
+ * 4. Enrich ALL filtered comps with floor area ONCE
+ * 5. For each radius: filter by distance + apply size/outlier filters
  */
 export async function fetchComparablesWithExpansion(
   params: ComparableFetchParams
@@ -67,10 +76,10 @@ export async function fetchComparablesWithExpansion(
   const { radiusSteps, minComps, maxRecencyMonths, sizeTolerance, outlierIqrMultiplier, maxAgeMonths } =
     config.comparables;
   
-  // Fetch all raw comparables once (we'll filter by radius in memory)
+  // Fetch all raw comparables once
   const rawComps = await fetchFromPropertyData(postcode, maxAgeMonths);
   
-  // Track radius attempts for MAT-2.1 debug output
+  // Track radius attempts for debug output
   const radiusAttempts: RadiusAttempt[] = [];
   
   if (rawComps.length === 0) {
@@ -98,10 +107,19 @@ export async function fetchComparablesWithExpansion(
   
   // Normalize all comparables (adds distance, age, etc.)
   const allNormalized = processComparables(rawComps, latitude, longitude);
-  
   logger.info(`📊 ${postcode}: ${allNormalized.length} sales loaded (${propertyType})`);
   
-  // Filter config for this property
+  // Apply basic filters (type + recency) to ALL comps ONCE
+  const basicResult = applyBasicFilters(allNormalized, propertyType, maxRecencyMonths);
+  logger.info(`📋 Basic filters: ${basicResult.passed.length}/${allNormalized.length} passed (type + recency)`);
+  
+  // Enrich ALL filtered comps with floor area ONCE (saves API calls)
+  let allEnriched: NormalizedComparable[] = [];
+  if (basicResult.passed.length > 0) {
+    allEnriched = await enrichWithFloorArea(basicResult.passed, postcode);
+  }
+  
+  // Filter config for size and outlier filters
   const filterConfig: ComparableFilterConfig = {
     propertyType,
     floorAreaSqm,
@@ -111,58 +129,69 @@ export async function fetchComparablesWithExpansion(
     minComps,
   };
   
-  // Try each radius step (MAT-2.1: track attempts with emoji logging)
+  // Try each radius step
   logger.info(`🔎 Starting radius expansion for ${postcode} (need ${minComps} comps)`);
   
   for (const radius of radiusSteps) {
-    // Filter by distance
-    const withinRadius = filterByRadius(allNormalized, latitude, longitude, radius);
+    // Filter enriched comps by distance
+    const withinRadius = filterByRadius(allEnriched, latitude, longitude, radius);
     
-    // Apply all filters to get count
+    // Count raw comps at this radius (for debug output)
+    const rawWithinRadius = filterByRadius(allNormalized, latitude, longitude, radius);
+    
+    // Apply full filters (floor area, size, outlier) to enriched comps
     const filterResult = filterWithFallback(withinRadius, filterConfig);
     
-    // Record this attempt for debug output
+    // Record this attempt
     radiusAttempts.push({
       radius,
-      rawComps: withinRadius.length,
+      rawComps: rawWithinRadius.length,
       afterFilters: filterResult.kept.length,
     });
     
+    logger.info(`   🔄 ${radius} mi → ${rawWithinRadius.length} raw → ${withinRadius.length} enriched → ${filterResult.kept.length} kept`);
+    
     // Check if we have enough comps
     if (filterResult.kept.length >= minComps) {
-      // Log success
-      logger.info(`   ✅ ${radius} mi → ${withinRadius.length} found → ${filterResult.kept.length} kept (SUCCESS)`);
+      logger.info(`   ✅ SUCCESS at ${radius} mi!`);
       
       // Sort kept comps by distance (closest first)
       const sortedKept = [...filterResult.kept].sort(
         (a, b) => a.distanceMiles - b.distanceMiles
       );
       
+      // Combine rejections: basic filter rejections within radius + full filter rejections
+      const basicRejectedWithinRadius = basicResult.rejected.filter(r =>
+        isWithinRadius(latitude, longitude, r.comp.latitude, r.comp.longitude, radius)
+      );
+      const totalRejected = [...basicRejectedWithinRadius, ...filterResult.rejected];
+      
       return {
         radiusUsed: radius,
         radiusAttempts,
-        totalFound: withinRadius.length,
+        totalFound: rawWithinRadius.length,
         totalKept: filterResult.kept.length,
-        totalRejected: filterResult.rejected.length,
+        totalRejected: totalRejected.length,
         kept: sortedKept,
-        rejected: filterResult.rejected,
+        rejected: totalRejected,
         stats: filterResult.stats,
         deskReview: false,
         deskReviewReason: null,
       };
-    } else {
-      // Log expansion needed
-      logger.info(`   🔄 ${radius} mi → ${withinRadius.length} found → ${filterResult.kept.length} kept (expanding...)`);
     }
   }
   
   // Used max radius but still not enough comps
   const maxRadius = radiusSteps[radiusSteps.length - 1];
-  const lastAttempt = radiusAttempts[radiusAttempts.length - 1];
-  
-  // Get the final filter result from the last attempt
-  const withinMaxRadius = filterByRadius(allNormalized, latitude, longitude, maxRadius);
+  const withinMaxRadius = filterByRadius(allEnriched, latitude, longitude, maxRadius);
+  const rawWithinMaxRadius = filterByRadius(allNormalized, latitude, longitude, maxRadius);
   const finalResult = filterWithFallback(withinMaxRadius, filterConfig);
+  
+  // Combine all rejections at max radius
+  const basicRejectedWithinMax = basicResult.rejected.filter(r =>
+    isWithinRadius(latitude, longitude, r.comp.latitude, r.comp.longitude, maxRadius)
+  );
+  const totalRejected = [...basicRejectedWithinMax, ...finalResult.rejected];
   
   // Sort kept comps by distance
   const sortedKept = [...finalResult.kept].sort(
@@ -174,17 +203,16 @@ export async function fetchComparablesWithExpansion(
       ? `No valid comparables found within ${maxRadius} mile radius`
       : `Only ${finalResult.kept.length} valid comparable(s) found within ${maxRadius} mile radius (minimum ${minComps} required)`;
   
-  // Log desk review needed
-  logger.warn(`   ❌ Max radius ${maxRadius} mi reached → only ${finalResult.kept.length} comps (need ${minComps}) → DESK REVIEW`);
+  logger.warn(`   ❌ Max radius ${maxRadius} mi → ${finalResult.kept.length} comps (need ${minComps}) → DESK REVIEW`);
   
   return {
     radiusUsed: maxRadius,
     radiusAttempts,
-    totalFound: withinMaxRadius.length,
+    totalFound: rawWithinMaxRadius.length,
     totalKept: finalResult.kept.length,
-    totalRejected: finalResult.rejected.length,
+    totalRejected: totalRejected.length,
     kept: sortedKept,
-    rejected: finalResult.rejected,
+    rejected: totalRejected,
     stats: finalResult.stats,
     deskReview: true,
     deskReviewReason,
