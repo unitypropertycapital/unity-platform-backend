@@ -326,17 +326,33 @@
       color: #8b949e;
       margin: 8px 0 4px;
     }
+    
+    code {
+      background: #21262d;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #79c0ff;
+    }
   </style>
 </head>
 <body>
 
   <h1>Moov Valuation API</h1>
-  <p class="subtitle">Property valuation with address resolution, EPC data, and comparable analysis</p>
+  <p class="subtitle">Property valuation with address resolution, EPC data, comparable analysis, and automated logging</p>
   
   <div class="status-bar">
     <span class="status-dot"></span>
     <span>All systems operational</span>
     <a href="/api/health">Health Check →</a>
+  </div>
+
+  <!-- SECURITY & FEATURES BADGES -->
+  <div class="tags" style="margin-bottom: 32px;">
+    <span class="tag" style="border-color: #238636; color: #3fb950;">🔐 HMAC Authentication</span>
+    <span class="tag" style="border-color: #1f6feb; color: #58a6ff;">⏱️ Rate Limited (10/hr)</span>
+    <span class="tag" style="border-color: #a371f7; color: #a371f7;">📊 Supabase Logging</span>
+    <span class="tag" style="border-color: #f0883e; color: #f0883e;">💾 Address Caching</span>
   </div>
 
   <!-- FLOW -->
@@ -735,7 +751,7 @@
       <tr>
         <td><span class="field-name">hmac</span><span class="field-required">REQUIRED</span></td>
         <td><span class="field-type">string</span></td>
-        <td><span class="field-desc">Use "placeholder" for now (HMAC coming later)</span></td>
+        <td><span class="field-desc">SHA-256 HMAC signature (64 hex chars) - see Authentication section below</span></td>
       </tr>
     </table>
   </div>
@@ -895,9 +911,78 @@
         <td><span class="field-desc">Reason for desk review</span></td>
       </tr>
       <tr>
-        <td><span class="field-name">marketValue</span></td>
-        <td><span class="field-type">null</span></td>
-        <td><span class="field-desc">Coming in Milestone 3</span></td>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">VALUATION RESULTS</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">marketValue.low</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Market value low estimate (GBP)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">marketValue.central</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Market value central estimate (GBP)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">marketValue.high</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Market value high estimate (GBP)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">conservativeMarketValue.low</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Conservative value with penalties applied</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">conservativeMarketValue.central</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Conservative central estimate</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">conservativeMarketValue.high</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Conservative high estimate</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">OFFERS</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">offers.fastTrack.low</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Fast-track offer minimum (75-82% of conservative)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">offers.fastTrack.high</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Fast-track offer maximum</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">offers.flexible.low</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Flexible offer minimum (82-88% of conservative)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">offers.flexible.high</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Flexible offer maximum</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">offers.selectedOfferType</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">"FAST_TRACK" (0-8 weeks) or "FLEXIBLE" (8+ weeks)</span></td>
+      </tr>
+      <tr>
+        <td colspan="3" style="background: #21262d; color: #8b949e; font-size: 11px; font-weight: 600;">CONFIDENCE</td>
+      </tr>
+      <tr>
+        <td><span class="field-name">confidence.score</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Confidence score (0-100)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">confidence.label</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">"HIGH" (≥80), "MEDIUM" (40-79), "LOW" (&lt;40)</span></td>
       </tr>
       <tr>
         <td><span class="field-name">timestamp</span></td>
@@ -1032,7 +1117,7 @@
   <span class="k">"reasonForSelling"</span>: <span class="s">"Relocating"</span>,
   <span class="k">"source"</span>: <span class="s">"website"</span>,
   <span class="k">"consent"</span>: <span class="b">true</span>,
-  <span class="k">"hmac"</span>: <span class="s">"placeholder"</span>
+  <span class="k">"hmac"</span>: <span class="s">"a1b2c3d4e5f6...64_hex_characters"</span>
 }</pre>
       </div>
     </div>
@@ -1043,80 +1128,58 @@
     <div class="content">
       <div class="code-block">
 <pre>{
-  <span class="k">"_milestone"</span>: <span class="n">2</span>,
   <span class="k">"subjectProperty"</span>: {
-    <span class="k">"line_1"</span>: <span class="s">"36 Charleville Road"</span>,
+    <span class="k">"line_1"</span>: <span class="s">"6 Hibernia Drive"</span>,
     <span class="k">"line_2"</span>: <span class="null">null</span>,
-    <span class="k">"line_3"</span>: <span class="null">null</span>,
-    <span class="k">"post_town"</span>: <span class="s">"London"</span>,
-    <span class="k">"postcode"</span>: <span class="s">"W149JH"</span>,
-    <span class="k">"normalizedAddress"</span>: <span class="s">"36 Charleville Road, London, W149JH"</span>,
-    <span class="k">"uprn"</span>: <span class="s">"34059043"</span>,
+    <span class="k">"post_town"</span>: <span class="s">"Gravesend"</span>,
+    <span class="k">"postcode"</span>: <span class="s">"DA12 4HT"</span>,
+    <span class="k">"normalizedAddress"</span>: <span class="s">"6 Hibernia Drive, Gravesend, DA12 4HT"</span>,
+    <span class="k">"uprn"</span>: <span class="s">"100060932062"</span>,
     <span class="k">"coordinates"</span>: {
-      <span class="k">"latitude"</span>: <span class="n">51.488885</span>,
-      <span class="k">"longitude"</span>: <span class="n">-0.2078126</span>
+      <span class="k">"latitude"</span>: <span class="n">51.4260153</span>,
+      <span class="k">"longitude"</span>: <span class="n">0.396665</span>
     }
   },
   <span class="k">"epc"</span>: {
     <span class="k">"available"</span>: <span class="b">true</span>,
-    <span class="k">"floorAreaSqm"</span>: <span class="n">48</span>,
-    <span class="k">"floorAreaSqFt"</span>: <span class="n">517</span>,
-    <span class="k">"habitableRooms"</span>: <span class="n">3</span>,
-    <span class="k">"rating"</span>: <span class="s">"C"</span>,
-    <span class="k">"score"</span>: <span class="n">70</span>
+    <span class="k">"floorAreaSqm"</span>: <span class="n">81</span>,
+    <span class="k">"floorAreaSqFt"</span>: <span class="n">872</span>,
+    <span class="k">"habitableRooms"</span>: <span class="n">4</span>,
+    <span class="k">"rating"</span>: <span class="s">"B"</span>,
+    <span class="k">"score"</span>: <span class="n">86</span>
   },
   <span class="k">"streetViewUrl"</span>: <span class="s">"https://maps.googleapis.com/..."</span>,
   <span class="k">"streetViewAvailable"</span>: <span class="b">true</span>,
   <span class="k">"comparables"</span>: {
     <span class="k">"radiusUsed"</span>: <span class="n">0.25</span>,
-    <span class="k">"radiusAttempts"</span>: [
-      { <span class="k">"radius"</span>: <span class="n">0.25</span>, <span class="k">"rawComps"</span>: <span class="n">20</span>, <span class="k">"afterFilters"</span>: <span class="n">14</span> }
-    ],
     <span class="k">"totalFound"</span>: <span class="n">20</span>,
-    <span class="k">"totalKept"</span>: <span class="n">14</span>,
-    <span class="k">"totalRejected"</span>: <span class="n">6</span>,
-    <span class="k">"deskReview"</span>: <span class="b">false</span>,
-    <span class="k">"deskReviewReason"</span>: <span class="null">null</span>,
-    <span class="k">"kept"</span>: [
-      {
-        <span class="k">"address"</span>: <span class="s">"Flat 1, 36, Charleville Road, W14 9JH"</span>,
-        <span class="k">"postcode"</span>: <span class="s">""</span>,
-        <span class="k">"salePrice"</span>: <span class="n">650000</span>,
-        <span class="k">"saleDate"</span>: <span class="s">"2025-04-04"</span>,
-        <span class="k">"propertyType"</span>: <span class="s">"flat"</span>,
-        <span class="k">"floorAreaSqm"</span>: <span class="null">null</span>,
-        <span class="k">"distanceMiles"</span>: <span class="n">0.001</span>,
-        <span class="k">"pricePerSqm"</span>: <span class="null">null</span>,
-        <span class="k">"pricePerSqft"</span>: <span class="null">null</span>,
-        <span class="k">"ageMonths"</span>: <span class="n">8</span>,
-        <span class="k">"source"</span>: <span class="s">"PD"</span>
-      }
-    ],
-    <span class="k">"rejected"</span>: [
-      {
-        <span class="k">"address"</span>: <span class="s">"Flat 5, 36, Charleville Road, W14 9JH"</span>,
-        <span class="k">"postcode"</span>: <span class="s">""</span>,
-        <span class="k">"salePrice"</span>: <span class="n">610000</span>,
-        <span class="k">"saleDate"</span>: <span class="s">"2023-08-08"</span>,
-        <span class="k">"reason"</span>: <span class="s">"too_old"</span>,
-        <span class="k">"details"</span>: <span class="s">"Sale date 28 months ago, max allowed is 24 months"</span>
-      }
-    ],
-    <span class="k">"stats"</span>: {
-      <span class="k">"count"</span>: <span class="n">14</span>,
-      <span class="k">"meanPricePerSqm"</span>: <span class="null">null</span>,
-      <span class="k">"medianPricePerSqm"</span>: <span class="null">null</span>,
-      <span class="k">"minPricePerSqm"</span>: <span class="null">null</span>,
-      <span class="k">"maxPricePerSqm"</span>: <span class="null">null</span>,
-      <span class="k">"stdDevPricePerSqm"</span>: <span class="null">null</span>
-    }
+    <span class="k">"totalKept"</span>: <span class="n">7</span>,
+    <span class="k">"totalRejected"</span>: <span class="n">13</span>,
+    <span class="k">"kept"</span>: [<span class="c">/* ... comparable objects ... */</span>],
+    <span class="k">"rejected"</span>: [<span class="c">/* ... rejected with reasons ... */</span>]
+  },
+  <span class="k">"marketValue"</span>: {
+    <span class="k">"low"</span>: <span class="n">278407</span>,
+    <span class="k">"central"</span>: <span class="n">302616</span>,
+    <span class="k">"high"</span>: <span class="n">326825</span>
+  },
+  <span class="k">"conservativeMarketValue"</span>: {
+    <span class="k">"low"</span>: <span class="n">267711</span>,
+    <span class="k">"central"</span>: <span class="n">281801</span>,
+    <span class="k">"high"</span>: <span class="n">295891</span>
+  },
+  <span class="k">"offers"</span>: {
+    <span class="k">"fastTrack"</span>: { <span class="k">"low"</span>: <span class="n">211351</span>, <span class="k">"high"</span>: <span class="n">231077</span> },
+    <span class="k">"flexible"</span>: { <span class="k">"low"</span>: <span class="n">231077</span>, <span class="k">"high"</span>: <span class="n">247985</span> },
+    <span class="k">"selectedOfferType"</span>: <span class="s">"FLEXIBLE"</span>
+  },
+  <span class="k">"confidence"</span>: {
+    <span class="k">"score"</span>: <span class="n">75</span>,
+    <span class="k">"label"</span>: <span class="s">"HIGH"</span>
   },
   <span class="k">"deskReview"</span>: <span class="b">false</span>,
   <span class="k">"deskReviewReason"</span>: <span class="null">null</span>,
-  <span class="k">"marketValue"</span>: <span class="null">null</span>,
-  <span class="k">"offers"</span>: <span class="null">null</span>,
-  <span class="k">"confidence"</span>: <span class="null">null</span>,
-  <span class="k">"timestamp"</span>: <span class="s">"2025-12-05T22:00:00.000Z"</span>
+  <span class="k">"timestamp"</span>: <span class="s">"2026-01-07T15:35:08.659Z"</span>
 }</pre>
       </div>
     </div>
@@ -1155,6 +1218,166 @@
   </details>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- AUTHENTICATION -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span style="font-size: 18px;">🔐 Authentication (HMAC)</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px;">
+    All <code>/api/valuation</code> requests require HMAC-SHA256 signature verification for security.
+  </p>
+
+  <div class="schema-section">
+    <div class="schema-title input">How to Generate HMAC</div>
+    <table class="schema-table">
+      <tr>
+        <th>Step</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">1. Build string</span></td>
+        <td><span class="field-desc">Concatenate: <code>addressLine1|postcode|propertyType|saleTimeline|consent</code></span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">2. Sign</span></td>
+        <td><span class="field-desc">HMAC-SHA256 with shared secret key</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">3. Format</span></td>
+        <td><span class="field-desc">Lowercase hex string (64 characters)</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <details>
+    <summary>📝 JavaScript Example</summary>
+    <div class="content">
+      <div class="code-block">
+<pre><span class="c">// Browser (Web Crypto API)</span>
+<span class="k">async function</span> generateHmac(payload, secret) {
+  <span class="k">const</span> dataToSign = [
+    payload.addressLine1,
+    payload.postcode,
+    payload.propertyType,
+    payload.saleTimeline,
+    payload.consent
+  ].join(<span class="s">'|'</span>);
+  
+  <span class="k">const</span> encoder = <span class="k">new</span> TextEncoder();
+  <span class="k">const</span> key = <span class="k">await</span> crypto.subtle.importKey(
+    <span class="s">'raw'</span>, encoder.encode(secret),
+    { name: <span class="s">'HMAC'</span>, hash: <span class="s">'SHA-256'</span> },
+    <span class="b">false</span>, [<span class="s">'sign'</span>]
+  );
+  
+  <span class="k">const</span> signature = <span class="k">await</span> crypto.subtle.sign(
+    <span class="s">'HMAC'</span>, key, encoder.encode(dataToSign)
+  );
+  
+  <span class="k">return</span> Array.from(<span class="k">new</span> Uint8Array(signature))
+    .map(b => b.toString(<span class="n">16</span>).padStart(<span class="n">2</span>, <span class="s">'0'</span>))
+    .join(<span class="s">''</span>);
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- RATE LIMITING -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span style="font-size: 18px;">⏱️ Rate Limiting</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px;">
+    The <code>/api/valuation</code> endpoint is rate limited to prevent abuse.
+  </p>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <label>Limit</label>
+      <span>10 requests per hour</span>
+    </div>
+    <div class="info-box">
+      <label>Window</label>
+      <span>Rolling 1 hour</span>
+    </div>
+    <div class="info-box">
+      <label>Identifier</label>
+      <span>Client IP address</span>
+    </div>
+    <div class="info-box">
+      <label>Exceeded Response</label>
+      <span>HTTP 429</span>
+    </div>
+  </div>
+
+  <details>
+    <summary>⚠️ Rate Limit Exceeded Response</summary>
+    <div class="content">
+      <div class="code-block">
+<pre><span class="c">// HTTP 429 Too Many Requests</span>
+{
+  <span class="k">"error"</span>: <span class="s">"Too Many Requests"</span>,
+  <span class="k">"message"</span>: <span class="s">"Rate limit exceeded. Try again later."</span>,
+  <span class="k">"retryAfter"</span>: <span class="n">3600</span>  <span class="c">// seconds until reset</span>
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- LOGGING -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span style="font-size: 18px;">📊 Logging & Analytics</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px;">
+    All valuation requests are automatically logged to Supabase for analytics and auditing.
+  </p>
+
+  <div class="info-grid">
+    <div class="info-box" style="grid-column: span 2;">
+      <label>Logged Data</label>
+      <span>Request inputs, resolved address, EPC data, market values, offers, confidence, comparables (kept & rejected), desk review status, processing time</span>
+    </div>
+  </div>
+
+  <details>
+    <summary>📋 Database Tables</summary>
+    <div class="content">
+      <table class="schema-table">
+        <tr><th>Table</th><th>Purpose</th></tr>
+        <tr>
+          <td><span class="field-name">valuations</span></td>
+          <td><span class="field-desc">Main valuation records with all inputs, outputs, and metadata</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">comps</span></td>
+          <td><span class="field-desc">Individual comparable properties linked to valuations (kept & rejected with reasons)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">addresses</span></td>
+          <td><span class="field-desc">Cached resolved addresses (from /api/address/resolve)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">postcode_lookups</span></td>
+          <td><span class="field-desc">Cached postcode search results (from /api/address/search)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">rate_limits</span></td>
+          <td><span class="field-desc">Rate limiting records per client IP</span></td>
+        </tr>
+      </table>
+    </div>
+  </details>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- TEST DATA -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   
@@ -1182,7 +1405,7 @@
   </div>
 
   <p style="color: #484f58; font-size: 12px; text-align: center; margin-top: 48px;">
-    Moov Valuation API v2.1 • Address Search with Caching
+    Moov Valuation API v3.0 • Full Valuation Engine with HMAC, Rate Limiting & Logging
   </p>
 
 </body>

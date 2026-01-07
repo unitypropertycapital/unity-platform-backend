@@ -9,6 +9,9 @@ import { calculateValuation } from '../src/engine/valuation';
 import { classifyComparable } from '../src/engine/valuation/exLADetection';
 import { getRequestOrigin } from '../src/utils/requestOrigin';
 import { handleError, getStatusCode } from '../src/utils/errors';
+import { logValuation, ValuationLogData } from '../src/services/valuationLogger';
+import { verifyHmacWithDetails } from '../src/utils/hmac';
+import { checkRateLimit, getClientIp } from '../src/utils/rateLimiter';
 import type { SubjectProperty } from '../src/types/property';
 import type { StreetViewResult } from '../src/types/services';
 import type { ComparablesResult } from '../src/types/comparable';
@@ -174,8 +177,11 @@ function buildDeskReviewResponse(
  */
 async function processValuation(
   data: ValuationRequest,
-  res: VercelResponse
+  res: VercelResponse,
+  origin: string,
+  hmacValid: boolean
 ): Promise<void> {
+  const startTime = Date.now();
   const propertyResult = await resolveSubjectProperty({
     addressLine1: data.addressLine1,
     addressLine2: data.addressLine2,
@@ -257,7 +263,37 @@ async function processValuation(
 
   res.status(200).json(response);
 
-  // Log summary
+  // Calculate processing time
+  const processingTimeMs = Date.now() - startTime;
+
+  // Log to Supabase database (async, don't block response)
+  const logData: ValuationLogData = {
+    inputAddress: data.addressLine1,
+    inputAddress2: data.addressLine2,
+    postcode: data.postcode,
+    propertyType: data.propertyType,
+    saleTimeline: data.saleTimeline,
+    reasonForSelling: data.reasonForSelling,
+    source: data.source,
+    addressId: data.addressId,
+    property,
+    valuation: valuationResult.success ? valuationResult : undefined,
+    comparables: comparablesResult,
+    streetViewUrl: streetViewResult.url,
+    streetViewAvailable: streetViewResult.available,
+    deskReview: !valuationResult.success,
+    deskReviewReason: valuationResult.success ? undefined : (valuationResult.deskReview.message ?? undefined),
+    requestOrigin: origin,
+    hmacValid,
+    processingTimeMs,
+  };
+
+  // Fire and forget - don't block response
+  logValuation(logData).catch(err => {
+    logger.error('Failed to log valuation', { error: (err as Error).message });
+  });
+
+  // Log summary to console
   if (valuationResult.success) {
     logger.info('Valuation completed successfully', {
       uprn: property.uprn,
@@ -267,6 +303,7 @@ async function processValuation(
       confidenceLabel: valuationResult.confidence.label,
       compsKept: comparablesResult.totalKept,
       radiusUsed: comparablesResult.radiusUsed,
+      processingTimeMs,
     });
   } else {
     logger.info('Valuation requires desk review', {
@@ -274,6 +311,7 @@ async function processValuation(
       reason: valuationResult.deskReview.reason,
       message: valuationResult.deskReview.message,
       compsKept: comparablesResult.totalKept,
+      processingTimeMs,
     });
   }
 }
@@ -310,7 +348,26 @@ export default async function handler(
   }
 
   const origin = getRequestOrigin(req);
-  logger.info('Valuation request received', { origin });
+  const clientIp = getClientIp(req);
+  const startTime = Date.now();
+  logger.info('Valuation request received', { origin, clientIp });
+
+  // Check rate limit
+  const rateLimitResult = await checkRateLimit(clientIp, 'valuation');
+  
+  // Set rate limit headers
+  res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+  res.setHeader('X-RateLimit-Reset', rateLimitResult.resetAt.toISOString());
+
+  if (!rateLimitResult.allowed) {
+    res.setHeader('Retry-After', (rateLimitResult.retryAfterSeconds || 3600).toString());
+    res.status(429).json({
+      error: 'Too Many Requests',
+      details: `Rate limit exceeded. Maximum 10 requests per hour.`,
+      retryAfter: rateLimitResult.retryAfterSeconds,
+    });
+    return;
+  }
 
   const validation = validateValuationRequest(req.body);
 
@@ -320,9 +377,41 @@ export default async function handler(
     return;
   }
 
+  // Verify HMAC signature
+  const hmacResult = verifyHmacWithDetails(req.body, validation.data.hmac);
+  const hmacValid = hmacResult.valid;
+
+  if (!hmacValid) {
+    logger.warn('HMAC verification failed', { error: hmacResult.error });
+    res.status(401).json({ 
+      error: 'Unauthorized', 
+      details: hmacResult.error || 'Invalid HMAC signature' 
+    });
+    return;
+  }
+
   try {
-    await processValuation(validation.data, res);
+    await processValuation(validation.data, res, origin, hmacValid);
   } catch (err) {
+    // Log error to database
+    const processingTimeMs = Date.now() - startTime;
+    logValuation({
+      inputAddress: validation.data.addressLine1,
+      inputAddress2: validation.data.addressLine2,
+      postcode: validation.data.postcode,
+      propertyType: validation.data.propertyType,
+      saleTimeline: validation.data.saleTimeline,
+      reasonForSelling: validation.data.reasonForSelling,
+      source: validation.data.source,
+      addressId: validation.data.addressId,
+      error: (err as Error).message,
+      requestOrigin: origin,
+      hmacValid,
+      processingTimeMs,
+    }).catch(logErr => {
+      logger.error('Failed to log error valuation', { error: (logErr as Error).message });
+    });
+
     // Centralized error handling - never silent
     const errorResponse = handleError(err, { endpoint: '/api/valuation', origin });
     const statusCode = getStatusCode(err);
