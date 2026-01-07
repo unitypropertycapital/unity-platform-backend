@@ -171,6 +171,10 @@ export async function resolveFromCachedAddress(
     epcScore: epcData.epcScore,
     epcAvailable: epcData.epcAvailable,
     epcMissingReason: epcData.epcMissingReason,
+    // Gov EPC data (populated separately via getGovEpcData)
+    constructionAgeBand: null,
+    flatStoreyCount: null,
+    epcPropertyType: null,
   };
 
   logger.info('Subject property resolved from cache', {
@@ -284,6 +288,10 @@ export async function resolveSubjectProperty(
       epcScore: epcData.epcScore,
       epcAvailable: epcData.epcAvailable,
       epcMissingReason: epcData.epcMissingReason,
+    // Gov EPC data (populated separately via getGovEpcData)
+    constructionAgeBand: null,
+    flatStoreyCount: null,
+    epcPropertyType: null,
   };
 
   logger.info('Subject property resolved successfully', {

@@ -241,70 +241,49 @@ async function fetchFloorAreasWithRateLimit(
 }
 
 /**
- * Enrich comparables with floor area data
- * 
- * This function:
- * 1. Extracts unique postcodes from comp addresses
- * 2. Fetches floor areas for each postcode from PropertyData (with rate limiting)
- * 3. Matches floor area records to comps by address
- * 4. Updates comp's floorAreaSqm field
- * 
- * @param comps - Normalized comparables without floor area
- * @param subjectPostcode - Subject property postcode (used as fallback)
- * @returns Enriched comparables with floor area where available
+ * Result from tiered enrichment
  */
-export async function enrichWithFloorArea(
+export interface EnrichmentResult {
+  comps: NormalizedComparable[];
+  apiCallsMade: number;
+  tier: 1 | 2 | 3;  // 1 = subject only, 2 = escalated, 3 = desk review triggered
+  compsWithFloorArea: number;
+}
+
+/**
+ * Normalize a postcode to standard format "AB1 2CD"
+ */
+function normalizePostcode(postcode: string): string {
+  const clean = postcode.toUpperCase().replace(/\s+/g, '');
+  if (clean.length >= 5) {
+    const outward = clean.slice(0, -3);
+    const inward = clean.slice(-3);
+    return `${outward} ${inward}`;
+  }
+  return postcode.toUpperCase();
+}
+
+/**
+ * Apply floor area data to comparables
+ */
+function applyFloorAreasToComps(
   comps: NormalizedComparable[],
-  subjectPostcode: string
-): Promise<NormalizedComparable[]> {
-  if (comps.length === 0) return comps;
-  
-  logger.info(`📐 Enriching ${comps.length} comps with floor area data...`);
-  
-  // Extract unique postcodes from comp addresses
-  const postcodes = extractUniquePostcodes(comps);
-  
-  // Add subject postcode to ensure coverage
-  const normalizedSubject = subjectPostcode.toUpperCase().replace(/\s+/g, '');
-  if (normalizedSubject.length >= 5) {
-    const outward = normalizedSubject.slice(0, -3);
-    const inward = normalizedSubject.slice(-3);
-    postcodes.add(`${outward} ${inward}`);
-  }
-  
-  // If still no postcodes, just use subject postcode
-  if (postcodes.size === 0) {
-    postcodes.add(subjectPostcode);
-  }
-  
-  const postcodeList = Array.from(postcodes);
-  logger.info(`📐 Fetching floor areas for ${postcodeList.length} postcode(s): ${postcodeList.join(', ')}`);
-  
-  // Fetch floor areas with rate limiting (200ms delay between requests)
-  const floorAreaCache = await fetchFloorAreasWithRateLimit(postcodeList, 200);
-  
-  // Combine all floor area records
-  const allFloorAreas: FloorAreaRecord[] = [];
-  for (const records of floorAreaCache.values()) {
-    allFloorAreas.push(...records);
-  }
-  
-  logger.info(`📐 Total floor area records: ${allFloorAreas.length}`);
-  
-  if (allFloorAreas.length === 0) {
-    logger.warn(`📐 No floor area data available for any postcode`);
-    return comps;
-  }
-  
-  // Enrich each comp
+  floorAreas: FloorAreaRecord[]
+): { enriched: NormalizedComparable[]; count: number } {
   let enrichedCount = 0;
-  const enrichedComps = comps.map((comp) => {
-    const match = findBestFloorAreaMatch(comp, allFloorAreas);
+  
+  const enriched = comps.map((comp) => {
+    // Skip if already has floor area
+    if (comp.floorAreaSqm && comp.floorAreaSqm > 0) {
+      enrichedCount++;
+      return comp;
+    }
+    
+    const match = findBestFloorAreaMatch(comp, floorAreas);
     
     if (match) {
       const floorAreaSqm = Math.round(match.square_feet * SQ_FT_TO_SQ_M);
       const floorAreaSqft = match.square_feet;
-      
       enrichedCount++;
       
       // Recalculate price per sqm/sqft
@@ -322,8 +301,158 @@ export async function enrichWithFloorArea(
     return comp;
   });
   
-  logger.info(`📐 Floor area enrichment: ${enrichedCount}/${comps.length} comps matched`);
+  return { enriched, count: enrichedCount };
+}
+
+/**
+ * Enrich comparables with floor area data using TIERED API calls
+ * 
+ * TIERED APPROACH:
+ * - Tier 1 (Default): Fetch floor areas for subject postcode ONLY (1 API call)
+ *   If we get enough comps with floor area (>=4), stop here.
+ * 
+ * - Tier 2 (Escalation): If <4 comps with floor area, fetch additional postcodes
+ *   where comps exist (up to 3 more = 4 total max).
+ * 
+ * - Tier 3: If still insufficient after max calls, proceed to valuation
+ *   (may trigger desk review later based on confidence).
+ * 
+ * GOAL: 80-90% of valuations complete with only 1-2 API calls.
+ * 
+ * @param comps - Normalized comparables without floor area
+ * @param subjectPostcode - Subject property postcode
+ * @returns Enrichment result with stats
+ */
+export async function enrichWithFloorAreaTiered(
+  comps: NormalizedComparable[],
+  subjectPostcode: string
+): Promise<EnrichmentResult> {
+  const { apiTiers } = config;
   
-  return enrichedComps;
+  if (comps.length === 0) {
+    return { comps, apiCallsMade: 0, tier: 1, compsWithFloorArea: 0 };
+  }
+  
+  logger.info(`📐 [TIERED] Enriching ${comps.length} comps (Tier 1: subject postcode only)`);
+  
+  const normalizedSubject = normalizePostcode(subjectPostcode);
+  let apiCallsMade = 0;
+  let allFloorAreas: FloorAreaRecord[] = [];
+  let enrichedComps = [...comps];
+  let compsWithFloorArea = 0;
+  
+  // ============================================
+  // TIER 1: Subject postcode only (1 API call)
+  // ============================================
+  const tier1Records = await fetchFloorAreasWithRetry(normalizedSubject);
+  apiCallsMade++;
+  allFloorAreas.push(...tier1Records);
+  
+  logger.info(`📐 [TIER 1] ${normalizedSubject}: ${tier1Records.length} floor area records (${apiCallsMade} API call)`);
+  
+  // Apply floor areas to comps
+  const tier1Result = applyFloorAreasToComps(enrichedComps, allFloorAreas);
+  enrichedComps = tier1Result.enriched;
+  compsWithFloorArea = tier1Result.count;
+  
+  logger.info(`📐 [TIER 1] Result: ${compsWithFloorArea}/${comps.length} comps have floor area`);
+  
+  // Check if Tier 1 is sufficient
+  if (compsWithFloorArea >= apiTiers.tier1MinComps) {
+    logger.info(`📐 ✅ TIER 1 SUCCESS: ${compsWithFloorArea} comps with floor area (target: ${apiTiers.tier1MinComps})`);
+    return {
+      comps: enrichedComps,
+      apiCallsMade,
+      tier: 1,
+      compsWithFloorArea,
+    };
+  }
+  
+  // ============================================
+  // TIER 2: Escalation - fetch additional postcodes
+  // ============================================
+  logger.info(`📐 [TIER 2] Escalating: only ${compsWithFloorArea} comps (need ${apiTiers.tier1MinComps})`);
+  
+  // Find postcodes of comps that DON'T have floor area yet
+  const compsNeedingFloorArea = enrichedComps.filter(c => !c.floorAreaSqm || c.floorAreaSqm === 0);
+  const additionalPostcodes = new Set<string>();
+  
+  for (const comp of compsNeedingFloorArea) {
+    const compPostcode = extractPostcodeFromAddress(comp.address) || comp.postcode;
+    if (compPostcode) {
+      const normalized = normalizePostcode(compPostcode);
+      // Don't re-fetch subject postcode
+      if (normalized !== normalizedSubject) {
+        additionalPostcodes.add(normalized);
+      }
+    }
+  }
+  
+  // Limit to max additional postcodes (respecting API call cap)
+  const remainingCalls = apiTiers.maxFloorAreaCalls - apiCallsMade;
+  const postcodesToFetch = Array.from(additionalPostcodes).slice(0, Math.min(apiTiers.tier2MaxPostcodes, remainingCalls));
+  
+  if (postcodesToFetch.length > 0) {
+    logger.info(`📐 [TIER 2] Fetching ${postcodesToFetch.length} additional postcode(s): ${postcodesToFetch.join(', ')}`);
+    
+    // Fetch with rate limiting
+    for (const postcode of postcodesToFetch) {
+      // Check if we've hit the cap
+      if (apiCallsMade >= apiTiers.maxFloorAreaCalls) {
+        logger.warn(`📐 [TIER 2] API call cap reached (${apiCallsMade}/${apiTiers.maxFloorAreaCalls})`);
+        break;
+      }
+      
+      // Rate limit delay
+      await delay(apiTiers.delayBetweenCallsMs);
+      
+      const records = await fetchFloorAreasWithRetry(postcode);
+      apiCallsMade++;
+      allFloorAreas.push(...records);
+      
+      logger.info(`📐 [TIER 2] ${postcode}: ${records.length} records (${apiCallsMade} total API calls)`);
+      
+      // Re-apply all floor areas
+      const result = applyFloorAreasToComps(enrichedComps, allFloorAreas);
+      enrichedComps = result.enriched;
+      compsWithFloorArea = result.count;
+      
+      // Check if we now have enough
+      if (compsWithFloorArea >= apiTiers.tier1MinComps) {
+        logger.info(`📐 ✅ TIER 2 SUCCESS: ${compsWithFloorArea} comps with floor area after ${apiCallsMade} calls`);
+        return {
+          comps: enrichedComps,
+          apiCallsMade,
+          tier: 2,
+          compsWithFloorArea,
+        };
+      }
+    }
+  }
+  
+  // ============================================
+  // TIER 3: Insufficient data - proceed anyway
+  // ============================================
+  logger.warn(`📐 ⚠️ TIER 3: Only ${compsWithFloorArea} comps after ${apiCallsMade} API calls (may trigger desk review)`);
+  
+  return {
+    comps: enrichedComps,
+    apiCallsMade,
+    tier: 3,
+    compsWithFloorArea,
+  };
+}
+
+/**
+ * Legacy function - wraps tiered enrichment for backwards compatibility
+ * 
+ * @deprecated Use enrichWithFloorAreaTiered for new code
+ */
+export async function enrichWithFloorArea(
+  comps: NormalizedComparable[],
+  subjectPostcode: string
+): Promise<NormalizedComparable[]> {
+  const result = await enrichWithFloorAreaTiered(comps, subjectPostcode);
+  return result.comps;
 }
 

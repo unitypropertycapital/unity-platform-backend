@@ -7,9 +7,9 @@ import { config } from '../../utils/config';
 import { logger } from '../../utils/logger';
 import { getSoldPrices } from '../../services/propertyData';
 import { fromPropertyData, processComparables } from './normalizer';
-import { filterWithFallback, applyBasicFilters } from './filter';
+import { filterWithFallback, applyBasicFilters, filterByMarketSegment } from './filter';
 import { isWithinRadius } from './distance';
-import { enrichWithFloorArea } from './enricher';
+import { enrichWithFloorAreaTiered, type EnrichmentResult } from './enricher';
 import type {
   RawComparable,
   NormalizedComparable,
@@ -62,17 +62,18 @@ function filterByRadius(
  * Fetch comparables with radius expansion
  * Starts at smallest radius and expands if not enough comps found
  * 
- * OPTIMIZED FLOW (with floor area enrichment):
+ * OPTIMIZED FLOW (with floor area enrichment and market segmentation):
  * 1. Fetch raw comps from PropertyData
- * 2. Normalize all comps
+ * 2. Normalize all comps (includes ex-LA classification)
  * 3. Apply basic filters to ALL comps (type + recency)
  * 4. Enrich ALL filtered comps with floor area ONCE
- * 5. For each radius: filter by distance + apply size/outlier filters
+ * 5. Filter by market segment (ex-LA vs private)
+ * 6. For each radius: filter by distance + apply size/outlier filters
  */
 export async function fetchComparablesWithExpansion(
   params: ComparableFetchParams
 ): Promise<ComparablesResult> {
-  const { postcode, latitude, longitude, propertyType, floorAreaSqm } = params;
+  const { postcode, latitude, longitude, propertyType, floorAreaSqm, subjectIsExLA } = params;
   const { radiusSteps, minComps, maxRecencyMonths, sizeTolerance, outlierIqrMultiplier, maxAgeMonths } =
     config.comparables;
   
@@ -113,11 +114,33 @@ export async function fetchComparablesWithExpansion(
   const basicResult = applyBasicFilters(allNormalized, propertyType, maxRecencyMonths);
   logger.info(`📋 Basic filters: ${basicResult.passed.length}/${allNormalized.length} passed (type + recency)`);
   
-  // Enrich ALL filtered comps with floor area ONCE (saves API calls)
+  // Enrich filtered comps with floor area using TIERED approach
+  // Tier 1: Subject postcode only (1 call) - sufficient for 80-90% of cases
+  // Tier 2: Additional postcodes if needed (up to 4 total calls)
   let allEnriched: NormalizedComparable[] = [];
+  let enrichmentResult: EnrichmentResult | null = null;
+  
   if (basicResult.passed.length > 0) {
-    allEnriched = await enrichWithFloorArea(basicResult.passed, postcode);
+    enrichmentResult = await enrichWithFloorAreaTiered(basicResult.passed, postcode);
+    allEnriched = enrichmentResult.comps;
+    
+    logger.info(`📊 Enrichment: Tier ${enrichmentResult.tier}, ${enrichmentResult.apiCallsMade} API calls, ${enrichmentResult.compsWithFloorArea}/${basicResult.passed.length} comps with floor area`);
   }
+  
+  // Apply market segment filtering (ex-LA vs private)
+  // This ensures base £/sqm calculations use segment-matched comparables
+  const marketSegmentResult = filterByMarketSegment(
+    allEnriched,
+    subjectIsExLA,
+    propertyType,
+    minComps
+  );
+  
+  // Use segment-filtered comps for all subsequent processing
+  allEnriched = marketSegmentResult.passed;
+  
+  // Combine rejections from basic and market segment filters
+  const preFilterRejections = [...basicResult.rejected, ...marketSegmentResult.rejected];
   
   // Filter config for size and outlier filters
   const filterConfig: ComparableFilterConfig = {
@@ -160,11 +183,11 @@ export async function fetchComparablesWithExpansion(
         (a, b) => a.distanceMiles - b.distanceMiles
       );
       
-      // Combine rejections: basic filter rejections within radius + full filter rejections
-      const basicRejectedWithinRadius = basicResult.rejected.filter(r =>
+      // Combine rejections: pre-filter rejections (basic + market segment) within radius + full filter rejections
+      const preFilterRejectedWithinRadius = preFilterRejections.filter(r =>
         isWithinRadius(latitude, longitude, r.comp.latitude, r.comp.longitude, radius)
       );
-      const totalRejected = [...basicRejectedWithinRadius, ...filterResult.rejected];
+      const totalRejected = [...preFilterRejectedWithinRadius, ...filterResult.rejected];
       
       return {
         radiusUsed: radius,
@@ -177,6 +200,11 @@ export async function fetchComparablesWithExpansion(
         stats: filterResult.stats,
         deskReview: false,
         deskReviewReason: null,
+        enrichmentStats: enrichmentResult ? {
+          tier: enrichmentResult.tier,
+          apiCallsMade: enrichmentResult.apiCallsMade,
+          compsWithFloorArea: enrichmentResult.compsWithFloorArea,
+        } : undefined,
       };
     }
   }
@@ -188,10 +216,10 @@ export async function fetchComparablesWithExpansion(
   const finalResult = filterWithFallback(withinMaxRadius, filterConfig);
   
   // Combine all rejections at max radius
-  const basicRejectedWithinMax = basicResult.rejected.filter(r =>
+  const preFilterRejectedWithinMax = preFilterRejections.filter(r =>
     isWithinRadius(latitude, longitude, r.comp.latitude, r.comp.longitude, maxRadius)
   );
-  const totalRejected = [...basicRejectedWithinMax, ...finalResult.rejected];
+  const totalRejected = [...preFilterRejectedWithinMax, ...finalResult.rejected];
   
   // Sort kept comps by distance
   const sortedKept = [...finalResult.kept].sort(
@@ -216,6 +244,10 @@ export async function fetchComparablesWithExpansion(
     stats: finalResult.stats,
     deskReview: true,
     deskReviewReason,
+    enrichmentStats: enrichmentResult ? {
+      tier: enrichmentResult.tier,
+      apiCallsMade: enrichmentResult.apiCallsMade,
+      compsWithFloorArea: enrichmentResult.compsWithFloorArea,
+    } : undefined,
   };
 }
-

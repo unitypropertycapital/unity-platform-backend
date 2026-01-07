@@ -27,6 +27,14 @@ export interface SubjectProperty {
   epcScore: number | null;
   epcAvailable: boolean;
   epcMissingReason: string | null;
+  
+  // Gov EPC data (for conservative valuation)
+  /** EPC construction age band, e.g., "1967-1975" */
+  constructionAgeBand: string | null;
+  /** Number of storeys in building (for flats) */
+  flatStoreyCount: number | null;
+  /** EPC property type from Gov EPC API */
+  epcPropertyType: string | null;
 }
 
 export type ResolvePropertyResult =

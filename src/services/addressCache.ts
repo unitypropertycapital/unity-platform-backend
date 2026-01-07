@@ -6,6 +6,7 @@
 import { getSupabaseClient } from './supabase';
 import { logger } from '../utils/logger';
 import type { CachedAddress, AddressInsertData } from '../types/address';
+import type { IdealPostcodesAddress } from '../types/services';
 
 /**
  * Normalize postcode for cache lookup (trimmed, uppercase, no spaces)
@@ -158,4 +159,80 @@ export function mapIdealPostcodesToAddressData(
     longitude: idealAddress.longitude || null,
     provider_raw: providerRaw,
   };
+}
+
+/**
+ * Find a cached postcode lookup
+ * Returns null if not found
+ */
+export async function findCachedPostcodeLookup(
+  postcode: string
+): Promise<IdealPostcodesAddress[] | null> {
+  const normPostcode = normalizePostcode(postcode);
+
+  logger.info('Looking up cached postcode lookup', { postcode: normPostcode });
+
+  const client = getSupabaseClient();
+
+  const { data, error } = await client
+    .from('postcode_lookups')
+    .select('addresses')
+    .eq('postcode', normPostcode)
+    .single();
+
+  if (error) {
+    // PGRST116 = no rows found - not an error
+    if (error.code === 'PGRST116') {
+      logger.info('Postcode not in cache', { postcode: normPostcode });
+      return null;
+    }
+
+    logger.error('Error looking up cached postcode', { error: error.message });
+    return null;
+  }
+
+  logger.info('Found cached postcode lookup', { 
+    postcode: normPostcode, 
+    addressCount: (data.addresses as IdealPostcodesAddress[]).length 
+  });
+  
+  return data.addresses as IdealPostcodesAddress[];
+}
+
+/**
+ * Cache a postcode lookup result
+ * Uses upsert to handle race conditions
+ */
+export async function cachePostcodeLookup(
+  postcode: string,
+  addresses: IdealPostcodesAddress[]
+): Promise<void> {
+  const normPostcode = normalizePostcode(postcode);
+
+  logger.info('Caching postcode lookup', { 
+    postcode: normPostcode, 
+    addressCount: addresses.length 
+  });
+
+  const client = getSupabaseClient();
+
+  const { error } = await client
+    .from('postcode_lookups')
+    .upsert(
+      {
+        postcode: normPostcode,
+        addresses: addresses,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: 'postcode',
+      }
+    );
+
+  if (error) {
+    logger.error('Error caching postcode lookup', { error: error.message });
+    return;
+  }
+
+  logger.info('Postcode lookup cached successfully', { postcode: normPostcode });
 }

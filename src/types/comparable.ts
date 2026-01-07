@@ -26,6 +26,8 @@ export interface NormalizedComparable extends RawComparable {
   pricePerSqm: number | null;
   pricePerSqft: number | null;
   ageMonths: number;
+  isExLA: boolean;        // Ex-local authority classification
+  exLAScore: number;      // Ex-LA detection score (0-4)
 }
 
 /**
@@ -39,7 +41,9 @@ export type RejectionReason =
   | 'outlier_low'
   | 'no_floor_area'
   | 'outside_radius'
-  | 'invalid_data';
+  | 'invalid_data'
+  | 'new_build_excluded'
+  | 'market_segment_mismatch';
 
 /**
  * Rejected comparable with reason
@@ -72,6 +76,15 @@ export interface RadiusAttempt {
 }
 
 /**
+ * Enrichment stats from tiered API call approach
+ */
+export interface EnrichmentStats {
+  tier: 1 | 2 | 3;           // 1 = subject only, 2 = escalated, 3 = insufficient
+  apiCallsMade: number;       // Number of /floor-areas API calls
+  compsWithFloorArea: number; // Comps that got floor area data
+}
+
+/**
  * Complete result from comparable fetching and filtering
  */
 export interface ComparablesResult {
@@ -85,6 +98,7 @@ export interface ComparablesResult {
   stats: ComparableStats;
   deskReview: boolean;
   deskReviewReason: string | null;
+  enrichmentStats?: EnrichmentStats; // Tiered API call stats
 }
 
 /**
@@ -96,6 +110,7 @@ export interface ComparableFetchParams {
   longitude: number;
   propertyType: string;
   floorAreaSqm: number | null;
+  subjectIsExLA: boolean;  // Ex-LA classification for market segmentation
 }
 
 /**
@@ -109,4 +124,3 @@ export interface ComparableFilterConfig {
   outlierIqrMultiplier: number;
   minComps: number;
 }
-

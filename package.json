@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "vercel dev",
+    "dev": "npx ts-node --project scripts/tsconfig.json scripts/dev-server.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",

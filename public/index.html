@@ -342,18 +342,182 @@
   <!-- FLOW -->
   <div class="flow">
     <div class="flow-step">
-      <span class="num">STEP 1</span>
-      <span class="endpoint">POST /api/address/resolve</span>
+      <span class="num">STEP 1 (Optional)</span>
+      <span class="endpoint">POST /api/address/search</span>
     </div>
     <span class="flow-arrow">→</span>
     <div class="flow-step">
       <span class="num">STEP 2</span>
+      <span class="endpoint">POST /api/address/resolve</span>
+    </div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">
+      <span class="num">STEP 3</span>
       <span class="endpoint">POST /api/valuation</span>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- ENDPOINT 1: ADDRESS RESOLVE -->
+  <!-- ENDPOINT 1: ADDRESS SEARCH (NEW) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  
+  <div class="section-header">
+    <span class="method-badge post">POST</span>
+    <span class="endpoint-path">/api/address/search</span>
+    <span style="background: #238636; color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 4px; margin-left: 8px;">NEW</span>
+  </div>
+  
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 24px;">
+    Search for addresses by postcode only. Returns a list of all addresses for dropdown selection. Results are cached - 1 API call per unique postcode.
+  </p>
+
+  <!-- REQUEST SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title input">Request Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">postcode</span><span class="field-required">REQUIRED</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">UK postcode (e.g. "E1 6AN")</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- RESPONSE SCHEMA -->
+  <div class="schema-section">
+    <div class="schema-title output">Response Body</div>
+    <table class="schema-table">
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td><span class="field-name">postcode</span></td>
+        <td><span class="field-type">string</span></td>
+        <td><span class="field-desc">Normalized postcode (no spaces, uppercase)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">addresses</span></td>
+        <td><span class="field-type">array</span></td>
+        <td><span class="field-desc">Array of address objects (see below)</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">count</span></td>
+        <td><span class="field-type">number</span></td>
+        <td><span class="field-desc">Total number of addresses found</span></td>
+      </tr>
+      <tr>
+        <td><span class="field-name">cached</span></td>
+        <td><span class="field-type">boolean</span></td>
+        <td><span class="field-desc">True if result was from cache (0 API calls)</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ADDRESS OBJECT SCHEMA -->
+  <details>
+    <summary>🏠 Address Object Schema (addresses array)</summary>
+    <div class="content">
+      <table class="schema-table">
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr>
+          <td><span class="field-name">uprn</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Unique Property Reference Number</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">line_1</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Address line 1</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">line_2</span></td>
+          <td><span class="field-type">string | null</span></td>
+          <td><span class="field-desc">Address line 2</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">line_3</span></td>
+          <td><span class="field-type">string | null</span></td>
+          <td><span class="field-desc">Address line 3</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">town</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Town or city</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">county</span></td>
+          <td><span class="field-type">string | null</span></td>
+          <td><span class="field-desc">County</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">postcode</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Postcode (formatted)</span></td>
+        </tr>
+        <tr>
+          <td><span class="field-name">display</span></td>
+          <td><span class="field-type">string</span></td>
+          <td><span class="field-desc">Formatted display string for dropdown</span></td>
+        </tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>📥 Example Request</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"postcode"</span>: <span class="s">"E1 6AN"</span>
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>📤 Example Response</summary>
+    <div class="content">
+      <div class="code-block">
+<pre>{
+  <span class="k">"postcode"</span>: <span class="s">"E16AN"</span>,
+  <span class="k">"addresses"</span>: [
+    {
+      <span class="k">"uprn"</span>: <span class="s">"200000074842"</span>,
+      <span class="k">"line_1"</span>: <span class="s">"6 Brushfield Street"</span>,
+      <span class="k">"line_2"</span>: <span class="null">null</span>,
+      <span class="k">"line_3"</span>: <span class="null">null</span>,
+      <span class="k">"town"</span>: <span class="s">"London"</span>,
+      <span class="k">"county"</span>: <span class="null">null</span>,
+      <span class="k">"postcode"</span>: <span class="s">"E1 6AN"</span>,
+      <span class="k">"display"</span>: <span class="s">"6 Brushfield Street, London"</span>
+    },
+    {
+      <span class="k">"uprn"</span>: <span class="s">"95515430"</span>,
+      <span class="k">"line_1"</span>: <span class="s">"10 Brushfield Street"</span>,
+      <span class="k">"line_2"</span>: <span class="null">null</span>,
+      <span class="k">"line_3"</span>: <span class="null">null</span>,
+      <span class="k">"town"</span>: <span class="s">"London"</span>,
+      <span class="k">"county"</span>: <span class="null">null</span>,
+      <span class="k">"postcode"</span>: <span class="s">"E1 6AN"</span>,
+      <span class="k">"display"</span>: <span class="s">"10 Brushfield Street, London"</span>
+    }
+  ],
+  <span class="k">"count"</span>: <span class="n">11</span>,
+  <span class="k">"cached"</span>: <span class="b">false</span>
+}</pre>
+      </div>
+    </div>
+  </details>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ENDPOINT 2: ADDRESS RESOLVE -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   
   <div class="section-header">
@@ -362,7 +526,7 @@
   </div>
   
   <p style="color: #8b949e; font-size: 13px; margin-bottom: 24px;">
-    Resolve a UK address and get a unique ID for valuation. Addresses are cached - subsequent lookups are instant.
+    Resolve a UK address and get a unique ID for valuation. Addresses are cached - subsequent lookups are instant. If postcode was searched first, uses cached data (0 API calls).
   </p>
 
   <!-- REQUEST SCHEMA -->
@@ -1018,7 +1182,7 @@
   </div>
 
   <p style="color: #484f58; font-size: 12px; text-align: center; margin-top: 48px;">
-    Moov Valuation API v2.0 • Milestone 2 Complete
+    Moov Valuation API v2.1 • Address Search with Caching
   </p>
 
 </body>

@@ -16,13 +16,14 @@ export type {
   ComparableStats,
   ComparableFetchParams,
   RadiusAttempt,
+  EnrichmentStats,
 } from '../../types/comparable';
 
 // Re-export utilities
 export { calculateDistanceMiles, isWithinRadius } from './distance';
 export { normalizePropertyType, calculateAgeMonths } from './normalizer';
-export { enrichWithFloorArea } from './enricher';
-export { applyBasicFilters, filterComparables, filterWithFallback } from './filter';
+export { enrichWithFloorArea, enrichWithFloorAreaTiered } from './enricher';
+export { applyBasicFilters, filterComparables, filterWithFallback, filterByMarketSegment } from './filter';
 
 /**
  * Fetch and filter comparables for a subject property
@@ -61,6 +62,10 @@ export async function fetchComparables(
       totalKept: result.totalKept,
       totalRejected: result.totalRejected,
       deskReview: result.deskReview,
+      // Tiered API call stats
+      enrichmentTier: result.enrichmentStats?.tier,
+      floorAreaApiCalls: result.enrichmentStats?.apiCallsMade,
+      compsWithFloorArea: result.enrichmentStats?.compsWithFloorArea,
     });
     
     return result;
@@ -108,6 +113,13 @@ export function formatComparablesResponse(result: ComparablesResult): Record<str
     deskReview: result.deskReview,
     deskReviewReason: result.deskReviewReason,
     
+    // Tiered API call stats (for monitoring API usage)
+    enrichmentStats: result.enrichmentStats ? {
+      tier: result.enrichmentStats.tier,
+      apiCallsMade: result.enrichmentStats.apiCallsMade,
+      compsWithFloorArea: result.enrichmentStats.compsWithFloorArea,
+    } : undefined,
+    
     kept: result.kept.map((comp) => ({
       address: comp.address,
       postcode: comp.postcode,
@@ -134,4 +146,3 @@ export function formatComparablesResponse(result: ComparablesResult): Record<str
     stats: result.stats,
   };
 }
-

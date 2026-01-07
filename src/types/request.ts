@@ -3,6 +3,37 @@ import type { PropertyType } from './property';
 export type SaleTimeline = '0-8_weeks' | '8-16_weeks' | '16+_weeks';
 
 /**
+ * Request body for /api/address/search
+ */
+export interface AddressSearchRequest {
+  postcode: string;
+}
+
+/**
+ * Response for /api/address/search
+ */
+export interface AddressSearchResponse {
+  postcode: string;
+  addresses: AddressOption[];
+  count: number;
+  cached: boolean;
+}
+
+/**
+ * Individual address option in search results
+ */
+export interface AddressOption {
+  uprn: string;
+  line_1: string;
+  line_2: string | null;
+  line_3: string | null;
+  town: string;
+  county: string | null;
+  postcode: string;
+  display: string; // Formatted display string for dropdown
+}
+
+/**
  * @deprecated Use addressId instead. Will be removed in future version.
  * Pre-resolved address data from frontend (optional)
  * If provided, skips Ideal Postcodes API call in backend
@@ -154,5 +185,33 @@ export function validateValuationRequest(
       addressId: hasAddressId ? (data.addressId as string) : undefined,
       resolvedAddress,
     },
+  };
+}
+
+/**
+ * Validate address search request
+ */
+export function validateAddressSearchRequest(
+  body: unknown
+): { valid: true; postcode: string } | { valid: false; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!body || typeof body !== 'object') {
+    return { valid: false, errors: ['Request body must be an object'] };
+  }
+
+  const data = body as Record<string, unknown>;
+
+  if (typeof data.postcode !== 'string' || !data.postcode.trim()) {
+    errors.push('postcode is required');
+  }
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    postcode: (data.postcode as string).trim(),
   };
 }

@@ -7,6 +7,8 @@ import {
   findCachedAddress,
   cacheAddress,
   mapIdealPostcodesToAddressData,
+  findCachedPostcodeLookup,
+  cachePostcodeLookup,
 } from '../../src/services/addressCache';
 import { lookupPostcode, findAddressMatch } from '../../src/services/idealPostcodes';
 import type { CachedAddress, AddressResolveResponse } from '../../src/types/address';
@@ -35,33 +37,54 @@ function toResponse(address: CachedAddress): AddressResolveResponse {
 
 /**
  * Resolve address from Ideal Postcodes and cache it
+ * 
+ * OPTIMIZATION: Checks postcode_lookups cache first before calling Ideal Postcodes API
+ * This reduces API calls when /api/address/search has been called for the same postcode
  */
 async function resolveAndCache(
   postcode: string,
   houseNumber: string,
   origin: string
 ): Promise<{ success: true; address: CachedAddress } | { success: false; error: string }> {
-  logger.info('Resolving address via Ideal Postcodes', { postcode, houseNumber });
+  logger.info('Resolving address', { postcode, houseNumber });
 
-  // Call Ideal Postcodes (this is the ONLY place in the system that calls it)
-  const postcodeResult = await lookupPostcode(postcode, origin);
+  // OPTIMIZATION: Check postcode_lookups cache first
+  let addresses = await findCachedPostcodeLookup(postcode);
+  
+  if (addresses && addresses.length > 0) {
+    logger.info('Using cached postcode lookup (0 Ideal Postcodes calls)', { 
+      postcode, 
+      addressCount: addresses.length 
+    });
+  } else {
+    // Cache miss - call Ideal Postcodes API
+    logger.info('Postcode not in cache, calling Ideal Postcodes API', { postcode });
+    
+    const postcodeResult = await lookupPostcode(postcode, origin);
 
-  if (!postcodeResult.success) {
-    logger.error('Ideal Postcodes lookup failed', { error: postcodeResult.error });
-    return { success: false, error: `Ideal Postcodes error: ${postcodeResult.error}` };
-  }
+    if (!postcodeResult.success) {
+      logger.error('Ideal Postcodes lookup failed', { error: postcodeResult.error });
+      return { success: false, error: `Ideal Postcodes error: ${postcodeResult.error}` };
+    }
 
-  if (postcodeResult.addresses.length === 0) {
-    return { success: false, error: 'No addresses found for this postcode' };
+    if (postcodeResult.addresses.length === 0) {
+      return { success: false, error: 'No addresses found for this postcode' };
+    }
+
+    addresses = postcodeResult.addresses;
+    
+    // Cache the postcode lookup for future use
+    await cachePostcodeLookup(postcode, addresses);
+    logger.info('Postcode lookup cached for future use', { postcode });
   }
 
   // Find matching address by house number
-  const matchedAddress = findAddressMatch(postcodeResult.addresses, houseNumber);
+  const matchedAddress = findAddressMatch(addresses, houseNumber);
 
   if (!matchedAddress) {
     logger.warn('No matching address found', {
       houseNumber,
-      availableCount: postcodeResult.addresses.length,
+      availableCount: addresses.length,
     });
     return {
       success: false,
@@ -77,7 +100,7 @@ async function resolveAndCache(
     matchedAddress as unknown as Record<string, unknown>
   );
 
-  // Cache the address
+  // Cache the resolved address
   const cached = await cacheAddress(addressData);
 
   if (!cached) {
@@ -91,8 +114,10 @@ async function resolveAndCache(
 /**
  * POST /api/address/resolve
  *
- * The ONLY endpoint that calls Ideal Postcodes.
- * Caches results in Supabase to avoid duplicate API calls.
+ * Resolves a specific address by postcode + house number
+ * 
+ * OPTIMIZATION: Now checks postcode_lookups cache before calling Ideal Postcodes
+ * This means if /api/address/search was called first, resolve makes 0 API calls
  *
  * Request: { postcode: string, houseNumber: string, town?: string }
  * Response: CachedAddress row

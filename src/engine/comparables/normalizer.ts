@@ -5,6 +5,7 @@
  */
 
 import { calculateDistanceMiles } from './distance';
+import { classifyComparable } from '../valuation/exLADetection';
 import type { RawComparable, NormalizedComparable } from '../../types/comparable';
 import type { LandRegistrySale } from '../../services/landRegistry';
 import type { PropertyDataSoldPrice } from '../../services/propertyData';
@@ -165,12 +166,17 @@ export function normalizeComparable(
     raw.longitude
   );
   
+  // Classify as ex-LA or private (early classification for market segmentation)
+  const classification = classifyComparable(raw.address, raw.propertyType);
+  
   return {
     ...raw,
     distanceMiles,
     pricePerSqm: calculatePricePerSqm(raw.salePrice, raw.floorAreaSqm),
     pricePerSqft: calculatePricePerSqft(raw.salePrice, raw.floorAreaSqm),
     ageMonths: calculateAgeMonths(raw.saleDate),
+    isExLA: classification.isExLA,
+    exLAScore: classification.exLAScore,
   };
 }
 
@@ -222,4 +228,3 @@ export function processComparables(
   // Normalize each comparable
   return deduped.map((raw) => normalizeComparable(raw, subjectLat, subjectLon));
 }
-
